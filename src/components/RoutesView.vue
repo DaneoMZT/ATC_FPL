@@ -1,8 +1,7 @@
 <template>
   <div class="routes-view">
-
     <!-- =====================================
-         ENCABEZADO
+        ENCABEZADO
     ====================================== -->
 
     <div class="title">
@@ -11,23 +10,16 @@
         <span>Base de datos ATCFPL</span>
       </div>
 
-      <div class="counter">
-        {{ routes.length }} rutas
-      </div>
+      <div class="counter">{{ routes.length }} rutas</div>
     </div>
-
 
     <!-- =====================================
          BUSCADOR DE AEROVÍAS
     ====================================== -->
 
     <div class="search-container">
-
       <div class="search-box">
-
-        <span class="search-icon">
-          ⌕
-        </span>
+        <span class="search-icon"> ⌕ </span>
 
         <input
           v-model="searchRoute"
@@ -44,63 +36,40 @@
         >
           ×
         </button>
-
       </div>
 
-      <span class="search-result">
-        {{ filteredRoutes.length }} aerovías encontradas
-      </span>
-
+      <span class="search-result"> {{ filteredRoutes.length }} aerovías encontradas </span>
     </div>
-
 
     <!-- =====================================
          CARGANDO
     ====================================== -->
 
-    <div
-      v-if="loading"
-      class="message"
-    >
-      Cargando rutas...
-    </div>
-
+    <div v-if="loading" class="message">Cargando rutas...</div>
 
     <!-- =====================================
          ERROR
     ====================================== -->
 
-    <div
-      v-else-if="error"
-      class="error"
-    >
+    <div v-else-if="error" class="error">
       {{ error }}
     </div>
-
 
     <!-- =====================================
          SIN RESULTADOS
     ====================================== -->
 
-    <div
-      v-else-if="filteredRoutes.length === 0"
-      class="no-results"
-    >
+    <div v-else-if="filteredRoutes.length === 0" class="no-results">
       <strong>No se encontraron aerovías</strong>
 
-      <span>
-        No existe ninguna ruta que coincida con
-        "{{ searchRoute }}"
-      </span>
+      <span> No existe ninguna ruta que coincida con "{{ searchRoute }}" </span>
     </div>
-
 
     <!-- =====================================
          TABLA DE RUTAS
     ====================================== -->
 
     <table v-else>
-
       <thead>
         <tr>
           <th>Ruta</th>
@@ -110,21 +79,12 @@
       </thead>
 
       <tbody>
-
-        <template
-          v-for="route in filteredRoutes"
-          :key="route._id"
-        >
-
+        <template v-for="route in filteredRoutes" :key="route._id">
           <!-- =====================================
                FILA DE RUTA
           ====================================== -->
 
-          <tr
-            class="route-row"
-            @click="toggleRoute(route._id)"
-          >
-
+          <tr class="route-row" @click="toggleRoute(route._id)">
             <td class="route-name">
               {{ route.route_name }}
             </td>
@@ -134,62 +94,37 @@
             </td>
 
             <td class="arrow">
-              {{
-                expandedRoute === route._id
-                  ? '▲'
-                  : '▼'
-              }}
+              {{ expandedRoute === route._id ? '▲' : '▼' }}
             </td>
-
           </tr>
-
 
           <!-- =====================================
                PUNTOS DE LA RUTA
           ====================================== -->
 
-          <tr
-            v-if="expandedRoute === route._id"
-            class="points-row"
-          >
-
+          <tr v-if="expandedRoute === route._id" class="points-row">
             <td colspan="3">
-
               <div class="points-container">
-
                 <div class="points-title">
                   PUNTOS DE LA RUTA
                   {{ route.route_name }}
                 </div>
 
-
                 <!-- SIN PUNTOS -->
 
-                <div
-                  v-if="
-                    !route.points ||
-                    route.points.length === 0
-                  "
-                  class="no-points"
-                >
+                <div v-if="!route.points || route.points.length === 0" class="no-points">
                   Esta ruta no contiene puntos.
                 </div>
 
-
                 <!-- LISTA DE PUNTOS -->
 
-                <div
-                  v-else
-                  class="points-list"
-                >
-
+                <div v-else class="points-list">
                   <button
                     v-for="(point, index) in route.points"
                     :key="index"
                     class="point"
                     @click.stop="selectPoint(point)"
                   >
-
                     <span class="point-number">
                       {{ index + 1 }}
                     </span>
@@ -197,380 +132,201 @@
                     <span class="point-name">
                       {{ getPointName(point) }}
                     </span>
-
                   </button>
-
                 </div>
-
               </div>
-
             </td>
-
           </tr>
-
         </template>
-
       </tbody>
-
     </table>
-
 
     <!-- =====================================
          MODAL DEL PUNTO
     ====================================== -->
 
-    <div
-      v-if="selectedPoint || pointLoading"
-      class="modal-overlay"
-      @click="closePoint"
-    >
-
-      <div
-        class="point-card"
-        @click.stop
-      >
-
+    <div v-if="selectedPoint || pointLoading" class="modal-overlay" @click="closePoint">
+      <div class="point-card" @click.stop>
         <!-- =====================================
              CARGANDO PUNTO
         ====================================== -->
 
-        <div
-          v-if="pointLoading"
-          class="point-loading"
-        >
-
+        <div v-if="pointLoading" class="point-loading">
           <div class="loading-circle"></div>
 
-          <span>
-            Consultando punto característico...
-          </span>
-
+          <span> Consultando punto característico... </span>
         </div>
-
 
         <!-- =====================================
              INFORMACIÓN DEL PUNTO
         ====================================== -->
 
         <template v-else-if="selectedPoint">
-
-
           <!-- HEADER -->
 
           <div class="point-card-header">
-
             <div>
-
-              <span class="card-label">
-                PUNTO CARACTERÍSTICO
-              </span>
+              <span class="card-label"> PUNTO CARACTERÍSTICO </span>
 
               <h2>
                 {{ getPointName(selectedPoint) }}
               </h2>
-
             </div>
 
-
-            <button
-              class="close-button"
-              @click="closePoint"
-              title="Cerrar"
-            >
-              ×
-            </button>
-
+            <button class="close-button" @click="closePoint" title="Cerrar">×</button>
           </div>
-
 
           <!-- =====================================
                POSICIÓN
           ====================================== -->
 
           <div class="coordinates">
-
             <div class="coordinate-main">
-
-              <span>
-                POSICIÓN
-              </span>
+              <span> POSICIÓN </span>
 
               <strong>
-                {{
-                  selectedPoint.position?.raw ||
-                  'N/D'
-                }}
+                {{ selectedPoint.position?.raw || 'N/D' }}
               </strong>
-
             </div>
-
           </div>
-
 
           <!-- =====================================
                INFORMACIÓN GENERAL
           ====================================== -->
 
           <div class="point-information">
-
-
             <!-- NOMBRE -->
 
             <div class="info-row">
-
-              <span>
-                Nombre
-              </span>
+              <span> Nombre </span>
 
               <strong>
-                {{
-                  selectedPoint.point_id ||
-                  'N/D'
-                }}
+                {{ selectedPoint.point_id || 'N/D' }}
               </strong>
-
             </div>
-
 
             <!-- TIPO -->
 
             <div class="info-row">
-
-              <span>
-                Tipo
-              </span>
+              <span> Tipo </span>
 
               <strong>
-                {{
-                  selectedPoint.point_type ||
-                  'N/D'
-                }}
+                {{ selectedPoint.point_type || 'N/D' }}
               </strong>
-
             </div>
-
 
             <!-- LATITUD -->
 
             <div class="info-row">
-
-              <span>
-                Latitud
-              </span>
+              <span> Latitud </span>
 
               <strong>
-                {{
-                  formatCoordinate(
-                    selectedPoint.position?.latitude
-                  )
-                }}
+                {{ formatCoordinate(selectedPoint.position?.latitude) }}
               </strong>
-
             </div>
-
 
             <!-- LONGITUD -->
 
             <div class="info-row">
-
-              <span>
-                Longitud
-              </span>
+              <span> Longitud </span>
 
               <strong>
-                {{
-                  formatCoordinate(
-                    selectedPoint.position?.longitude
-                  )
-                }}
+                {{ formatCoordinate(selectedPoint.position?.longitude) }}
               </strong>
-
             </div>
-
 
             <!-- AEROPUERTO -->
 
             <div class="info-row">
-
-              <span>
-                Aeropuerto asociado
-              </span>
+              <span> Aeropuerto asociado </span>
 
               <strong>
-                {{
-                  selectedPoint.airport_id ||
-                  'N/D'
-                }}
+                {{ selectedPoint.airport_id || 'N/D' }}
               </strong>
-
             </div>
-
 
             <!-- FIJO RELEVANTE -->
 
             <div class="info-row">
+              <span> Fijo relevante </span>
 
-              <span>
-                Fijo relevante
-              </span>
-
-              <strong
-                :class="
-                  selectedPoint.relevant_fix
-                    ? 'yes'
-                    : 'no'
-                "
-              >
-                {{
-                  selectedPoint.relevant_fix
-                    ? 'SÍ'
-                    : 'NO'
-                }}
+              <strong :class="selectedPoint.relevant_fix ? 'yes' : 'no'">
+                {{ selectedPoint.relevant_fix ? 'SÍ' : 'NO' }}
               </strong>
-
             </div>
-
 
             <!-- PIL DISPLAY -->
 
             <div class="info-row">
+              <span> PIL Display </span>
 
-              <span>
-                PIL Display
-              </span>
-
-              <strong
-                :class="
-                  selectedPoint.pil_display
-                    ? 'yes'
-                    : 'no'
-                "
-              >
-                {{
-                  selectedPoint.pil_display
-                    ? 'SÍ'
-                    : 'NO'
-                }}
+              <strong :class="selectedPoint.pil_display ? 'yes' : 'no'">
+                {{ selectedPoint.pil_display ? 'SÍ' : 'NO' }}
               </strong>
-
             </div>
-
 
             <!-- DTI -->
 
             <div class="info-row">
+              <span> DTI </span>
 
-              <span>
-                DTI
-              </span>
-
-              <strong
-                :class="
-                  selectedPoint.dti
-                    ? 'yes'
-                    : 'no'
-                "
-              >
-                {{
-                  selectedPoint.dti
-                    ? 'SÍ'
-                    : 'NO'
-                }}
+              <strong :class="selectedPoint.dti ? 'yes' : 'no'">
+                {{ selectedPoint.dti ? 'SÍ' : 'NO' }}
               </strong>
-
             </div>
-
 
             <!-- ID ALTERNATIVO -->
 
-            <div
-              v-if="selectedPoint.alternative_id"
-              class="info-row"
-            >
-
-              <span>
-                ID alternativo
-              </span>
+            <div v-if="selectedPoint.alternative_id" class="info-row">
+              <span> ID alternativo </span>
 
               <strong>
                 {{ selectedPoint.alternative_id }}
               </strong>
-
             </div>
-
           </div>
-
 
           <!-- =====================================
                COMENTARIO
           ====================================== -->
 
-          <div
-            v-if="selectedPoint.comment"
-            class="comment"
-          >
-
-            <span>
-              COMENTARIO
-            </span>
+          <div v-if="selectedPoint.comment" class="comment">
+            <span> COMENTARIO </span>
 
             <p>
               {{ selectedPoint.comment }}
             </p>
-
           </div>
-
 
           <!-- =====================================
                ESTADO
           ====================================== -->
 
           <div class="point-status">
-
             <span class="status-dot"></span>
 
             INFORMACIÓN DE BASE DE DATOS
-
           </div>
-
         </template>
-
       </div>
-
     </div>
-
 
     <!-- =====================================
          ERROR AL CONSULTAR PUNTO
     ====================================== -->
 
-    <div
-      v-if="pointError"
-      class="notification-error"
-    >
-
+    <div v-if="pointError" class="notification-error">
       {{ pointError }}
 
-      <button
-        @click="pointError = ''"
-      >
-        ×
-      </button>
-
+      <button @click="pointError = ''">×</button>
     </div>
-
   </div>
 </template>
 
-
 <script setup>
+import { API_URL } from '../config'
 
-import {
-  ref,
-  computed,
-  onMounted
-} from 'vue'
-
+import { ref, computed, onMounted } from 'vue'
 
 // =====================================
 // VARIABLES
@@ -592,264 +348,168 @@ const pointLoading = ref(false)
 
 const pointError = ref('')
 
-
 // =====================================
 // FILTRAR AEROVÍAS
 // =====================================
 
 const filteredRoutes = computed(() => {
-
-  const search = searchRoute.value
-    .trim()
-    .toUpperCase()
+  const search = searchRoute.value.trim().toUpperCase()
 
   if (!search) {
     return routes.value
   }
 
   return routes.value.filter((route) => {
-
-    const routeName = String(
-      route.route_name || ''
-    ).toUpperCase()
+    const routeName = String(route.route_name || '').toUpperCase()
 
     return routeName.includes(search)
-
   })
-
 })
-
 
 // =====================================
 // LIMPIAR BUSCADOR
 // =====================================
 
 const clearSearch = () => {
-
   searchRoute.value = ''
 
   expandedRoute.value = null
-
 }
-
 
 // =====================================
 // CARGAR RUTAS
 // =====================================
 
 const loadRoutes = async () => {
-
   try {
-
     loading.value = true
 
     error.value = ''
 
     const response = await fetch(
-      'http://localhost:3000/api/routes'
+      //'http://localhost:3000/api/routes'
+      `${API_URL}/routes`,
     )
 
     if (!response.ok) {
-
-      throw new Error(
-        'Error consultando la API'
-      )
-
+      throw new Error('Error consultando la API')
     }
 
     routes.value = await response.json()
-
   } catch (err) {
+    console.error('Error cargando rutas:', err)
 
-    console.error(
-      'Error cargando rutas:',
-      err
-    )
-
-    error.value =
-      'No se pudieron cargar las rutas'
-
+    error.value = 'No se pudieron cargar las rutas'
   } finally {
-
     loading.value = false
-
   }
-
 }
-
 
 // =====================================
 // ABRIR / CERRAR RUTA
 // =====================================
 
 const toggleRoute = (routeId) => {
-
   if (expandedRoute.value === routeId) {
-
     expandedRoute.value = null
-
   } else {
-
     expandedRoute.value = routeId
-
   }
-
 }
-
 
 // =====================================
 // SELECCIONAR PUNTO
 // =====================================
 
 const selectPoint = async (point) => {
-
-  const pointId =
-    point.point_id ||
-    point.route_point ||
-    point.raw
+  const pointId = point.point_id || point.route_point || point.raw
 
   if (!pointId) {
-
-    pointError.value =
-      'El punto no tiene un identificador válido'
+    pointError.value = 'El punto no tiene un identificador válido'
 
     return
-
   }
 
-
   try {
-
     pointError.value = ''
 
     selectedPoint.value = null
 
     pointLoading.value = true
 
-
     const response = await fetch(
-      `http://localhost:3000/api/characteristic-points/${encodeURIComponent(pointId)}`
+      //`http://localhost:3000/api/characteristic-points/${encodeURIComponent(pointId)}`,
+      `${API_URL}/characteristic-points/${encodeURIComponent(pointId)}`,
     )
-
 
     if (!response.ok) {
-
       if (response.status === 404) {
-
-        throw new Error(
-          `El punto ${pointId} no existe en characteristic_points`
-        )
-
+        throw new Error(`El punto ${pointId} no existe en characteristic_points`)
       }
 
-      throw new Error(
-        'Error consultando el punto'
-      )
-
+      throw new Error('Error consultando el punto')
     }
 
-
-    selectedPoint.value =
-      await response.json()
-
-
+    selectedPoint.value = await response.json()
   } catch (err) {
-
-    console.error(
-      'Error obteniendo punto característico:',
-      err
-    )
+    console.error('Error obteniendo punto característico:', err)
 
     pointError.value = err.message
-
-
   } finally {
-
     pointLoading.value = false
-
   }
-
 }
-
 
 // =====================================
 // CERRAR MODAL
 // =====================================
 
 const closePoint = () => {
-
   selectedPoint.value = null
 
   pointLoading.value = false
-
 }
-
 
 // =====================================
 // NOMBRE DEL PUNTO
 // =====================================
 
 const getPointName = (point) => {
-
   if (!point) {
-
     return 'SIN NOMBRE'
-
   }
 
-  return (
-    point.point_id ||
-    point.route_point ||
-    point.raw ||
-    'SIN NOMBRE'
-  )
-
+  return point.point_id || point.route_point || point.raw || 'SIN NOMBRE'
 }
-
 
 // =====================================
 // FORMATO DE COORDENADAS
 // =====================================
 
 const formatCoordinate = (coordinate) => {
-
-  if (
-    coordinate === null ||
-    coordinate === undefined
-  ) {
-
+  if (coordinate === null || coordinate === undefined) {
     return 'N/D'
-
   }
 
   const number = Number(coordinate)
 
   if (Number.isNaN(number)) {
-
     return 'N/D'
-
   }
 
   return number.toFixed(8)
-
 }
-
 
 // =====================================
 // INICIAR
 // =====================================
 
 onMounted(() => {
-
   loadRoutes()
-
 })
-
 </script>
 
-
 <style scoped>
-
 /* =====================================
    CONTENEDOR
 ===================================== */
@@ -859,7 +519,6 @@ onMounted(() => {
 
   color: #dce7f1;
 }
-
 
 /* =====================================
    ENCABEZADO
@@ -875,20 +534,17 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-
 .title h2 {
   margin: 0 0 5px;
 
   color: #00e5ff;
 }
 
-
 .title span {
   color: #71869b;
 
   font-size: 12px;
 }
-
 
 .counter {
   background: #123847;
@@ -901,7 +557,6 @@ onMounted(() => {
 
   font-size: 12px;
 }
-
 
 /* =====================================
    BUSCADOR
@@ -916,7 +571,6 @@ onMounted(() => {
 
   margin-bottom: 20px;
 }
-
 
 .search-box {
   width: 350px;
@@ -940,14 +594,11 @@ onMounted(() => {
   transition: 0.2s;
 }
 
-
 .search-box:focus-within {
   border-color: #00e5ff;
 
-  box-shadow:
-    0 0 0 2px rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08);
 }
-
 
 .search-icon {
   color: #60758b;
@@ -956,7 +607,6 @@ onMounted(() => {
 
   margin-right: 10px;
 }
-
 
 .search-box input {
   flex: 1;
@@ -978,13 +628,11 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-
 .search-box input::placeholder {
   color: #52677b;
 
   text-transform: none;
 }
-
 
 .clear-search {
   border: none;
@@ -1000,18 +648,15 @@ onMounted(() => {
   padding: 0 4px;
 }
 
-
 .clear-search:hover {
   color: #ffffff;
 }
-
 
 .search-result {
   color: #71869b;
 
   font-size: 11px;
 }
-
 
 /* =====================================
    SIN RESULTADOS
@@ -1039,18 +684,15 @@ onMounted(() => {
   color: #71869b;
 }
 
-
 .no-results strong {
   color: #dce7f1;
 
   font-size: 13px;
 }
 
-
 .no-results span {
   font-size: 11px;
 }
-
 
 /* =====================================
    TABLA
@@ -1070,7 +712,6 @@ table {
   overflow: hidden;
 }
 
-
 th {
   text-align: left;
 
@@ -1085,13 +726,11 @@ th {
   letter-spacing: 0.5px;
 }
 
-
 td {
   padding: 13px 16px;
 
   border-top: 1px solid #17283a;
 }
-
 
 /* =====================================
    RUTA
@@ -1103,11 +742,9 @@ td {
   transition: 0.2s;
 }
 
-
 .route-row:hover {
   background: #102334;
 }
-
 
 .route-name {
   color: #5bd6dd;
@@ -1119,7 +756,6 @@ td {
   font-size: 14px;
 }
 
-
 .arrow {
   width: 40px;
 
@@ -1130,7 +766,6 @@ td {
   font-size: 10px;
 }
 
-
 /* =====================================
    PUNTOS DE LA RUTA
 ===================================== */
@@ -1139,16 +774,13 @@ td {
   background: #07121d;
 }
 
-
 .points-row td {
   padding: 0;
 }
 
-
 .points-container {
   padding: 20px 30px;
 }
-
 
 .points-title {
   color: #71869b;
@@ -1160,7 +792,6 @@ td {
   letter-spacing: 1px;
 }
 
-
 .points-list {
   display: flex;
 
@@ -1170,7 +801,6 @@ td {
 
   gap: 8px;
 }
-
 
 .point {
   display: flex;
@@ -1192,7 +822,6 @@ td {
   transition: 0.2s;
 }
 
-
 .point:hover {
   background: #123847;
 
@@ -1200,7 +829,6 @@ td {
 
   transform: translateY(-1px);
 }
-
 
 .point-number {
   display: flex;
@@ -1222,7 +850,6 @@ td {
   font-size: 10px;
 }
 
-
 .point-name {
   color: #dce7f1;
 
@@ -1233,13 +860,11 @@ td {
   font-weight: bold;
 }
 
-
 .no-points {
   color: #71869b;
 
   font-size: 12px;
 }
-
 
 /* =====================================
    MODAL
@@ -1269,7 +894,6 @@ td {
   z-index: 5000;
 }
 
-
 /* =====================================
    TARJETA DEL PUNTO
 ===================================== */
@@ -1289,10 +913,8 @@ td {
 
   border-radius: 12px;
 
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
-
 
 /* =====================================
    HEADER DE LA TARJETA
@@ -1310,7 +932,6 @@ td {
   border-bottom: 1px solid #17283a;
 }
 
-
 .card-label {
   color: #60758b;
 
@@ -1318,7 +939,6 @@ td {
 
   letter-spacing: 1.5px;
 }
-
 
 .point-card-header h2 {
   margin: 4px 0 0;
@@ -1329,7 +949,6 @@ td {
 
   font-size: 25px;
 }
-
 
 .close-button {
   border: none;
@@ -1343,11 +962,9 @@ td {
   cursor: pointer;
 }
 
-
 .close-button:hover {
   color: #ffffff;
 }
-
 
 /* =====================================
    POSICIÓN
@@ -1361,7 +978,6 @@ td {
   border-bottom: 1px solid #17283a;
 }
 
-
 .coordinate-main {
   display: flex;
 
@@ -1370,7 +986,6 @@ td {
   gap: 5px;
 }
 
-
 .coordinate-main span {
   color: #60758b;
 
@@ -1378,7 +993,6 @@ td {
 
   letter-spacing: 1px;
 }
-
 
 .coordinate-main strong {
   color: #dce7f1;
@@ -1390,7 +1004,6 @@ td {
   letter-spacing: 1px;
 }
 
-
 /* =====================================
    INFORMACIÓN DEL PUNTO
 ===================================== */
@@ -1398,7 +1011,6 @@ td {
 .point-information {
   padding: 15px 25px;
 }
-
 
 .info-row {
   display: flex;
@@ -1414,18 +1026,15 @@ td {
   border-bottom: 1px solid #122536;
 }
 
-
 .info-row:last-child {
   border-bottom: none;
 }
-
 
 .info-row span {
   color: #71869b;
 
   font-size: 11px;
 }
-
 
 .info-row strong {
   color: #dce7f1;
@@ -1437,16 +1046,13 @@ td {
   text-align: right;
 }
 
-
 .info-row .yes {
   color: #4fd68a;
 }
 
-
 .info-row .no {
   color: #71869b;
 }
-
 
 /* =====================================
    COMENTARIO
@@ -1464,7 +1070,6 @@ td {
   border-radius: 6px;
 }
 
-
 .comment span {
   color: #60758b;
 
@@ -1472,7 +1077,6 @@ td {
 
   letter-spacing: 1px;
 }
-
 
 .comment p {
   margin: 6px 0 0;
@@ -1483,7 +1087,6 @@ td {
 
   line-height: 1.5;
 }
-
 
 /* =====================================
    ESTADO
@@ -1507,7 +1110,6 @@ td {
   letter-spacing: 1px;
 }
 
-
 .status-dot {
   width: 6px;
 
@@ -1519,7 +1121,6 @@ td {
 
   box-shadow: 0 0 7px #4fd68a;
 }
-
 
 /* =====================================
    CARGANDO PUNTO
@@ -1543,7 +1144,6 @@ td {
   font-size: 12px;
 }
 
-
 .loading-circle {
   width: 25px;
 
@@ -1558,13 +1158,11 @@ td {
   animation: spin 0.8s linear infinite;
 }
 
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
-
 
 /* =====================================
    ERROR DEL PUNTO
@@ -1592,7 +1190,6 @@ td {
   z-index: 6000;
 }
 
-
 .notification-error button {
   margin-left: 15px;
 
@@ -1607,7 +1204,6 @@ td {
   font-size: 16px;
 }
 
-
 /* =====================================
    MENSAJES
 ===================================== */
@@ -1616,34 +1212,27 @@ td {
   color: #71869b;
 }
 
-
 .error {
   color: #ff6b6b;
 }
-
 
 /* =====================================
    RESPONSIVE
 ===================================== */
 
 @media (max-width: 700px) {
-
   .search-container {
     flex-direction: column;
 
     align-items: stretch;
   }
 
-
   .search-box {
     width: 100%;
   }
 
-
   .search-result {
     padding-left: 3px;
   }
-
 }
-
 </style>

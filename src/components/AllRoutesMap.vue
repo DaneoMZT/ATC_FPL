@@ -1,6 +1,5 @@
 <template>
   <div class="map-system">
-
     <!-- =====================================
          MODO DE BÚSQUEDA
     ====================================== -->
@@ -23,348 +22,185 @@
       </button>
     </div>
 
-
- <!-- =====================================
+    <!-- =====================================
      BUSCADOR
 ====================================== -->
-<div class="map-toolbar">
+    <div class="map-toolbar">
+      <div class="search-box">
+        <span class="search-icon"> ⌕ </span>
 
-  <div class="search-box">
+        <input
+          v-model="search"
+          type="text"
+          :placeholder="searchPlaceholder"
+          autocomplete="off"
+          @keyup.enter="executeSearch"
+        />
 
-    <span class="search-icon">
-      ⌕
-    </span>
+        <button v-if="search" class="clear-search" @click="clearSearch">×</button>
 
-    <input
-      v-model="search"
-      type="text"
-      :placeholder="searchPlaceholder"
-      autocomplete="off"
-      @keyup.enter="executeSearch"
-    />
+        <button
+          v-if="searchMode === 'point'"
+          class="search-button"
+          :disabled="pointLoading || !search.trim()"
+          @click="searchPoint"
+        >
+          {{ pointLoading ? 'BUSCANDO...' : 'BUSCAR' }}
+        </button>
+      </div>
 
-    <button
-      v-if="search"
-      class="clear-search"
-      @click="clearSearch"
-    >
-      ×
-    </button>
+      <div class="route-counter">
+        <!-- MODO AEROVÍA -->
+        <template v-if="searchMode === 'route'">
+          <strong>
+            {{ filteredRoutes.length }}
+          </strong>
 
-    <button
-      v-if="searchMode === 'point'"
-      class="search-button"
-      :disabled="pointLoading || !search.trim()"
-      @click="searchPoint"
-    >
-      {{ pointLoading ? 'BUSCANDO...' : 'BUSCAR' }}
-    </button>
+          <span v-if="search"> resultados </span>
 
-  </div>
+          <span v-else-if="selectedGroup"> aerovías del grupo </span>
 
-  <div class="route-counter">
+          <span v-else> selecciona un grupo </span>
+        </template>
 
-    <!-- MODO AEROVÍA -->
-    <template v-if="searchMode === 'route'">
+        <!-- MODO FIJO -->
+        <template v-else>
+          <strong>
+            {{ pointRoutes.length }}
+          </strong>
 
-      <strong>
-        {{ filteredRoutes.length }}
-      </strong>
-
-      <span v-if="search">
-        resultados
-      </span>
-
-      <span v-else-if="selectedGroup">
-        aerovías del grupo
-      </span>
-
-      <span v-else>
-        selecciona un grupo
-      </span>
-
-    </template>
-
-    <!-- MODO FIJO -->
-    <template v-else>
-
-      <strong>
-        {{ pointRoutes.length }}
-      </strong>
-
-      <span>
-        aerovías del fijo
-      </span>
-
-    </template>
-
-  </div>
-
-</div>
-<!-- =====================================
+          <span> aerovías del fijo </span>
+        </template>
+      </div>
+    </div>
+    <!-- =====================================
     MODIFICAR FIJO
 ====================================== -->
 
-<div
-  v-if="editPointVisible"
-  class="edit-point-overlay"
-  @click.self="closeEditPoint"
->
+    <div v-if="editPointVisible" class="edit-point-overlay" @click.self="closeEditPoint">
+      <div class="edit-point-modal">
+        <!-- ENCABEZADO -->
 
-  <div class="edit-point-modal">
+        <div class="edit-point-header">
+          <div>
+            <span> EDICIÓN ATC </span>
 
-    <!-- ENCABEZADO -->
+            <h2>MODIFICAR FIJO</h2>
+          </div>
 
-    <div class="edit-point-header">
+          <button class="edit-point-close" @click="closeEditPoint">×</button>
+        </div>
 
-      <div>
-        <span>
-          EDICIÓN ATC
-        </span>
+        <!-- CAMPOS -->
 
-        <h2>
-          MODIFICAR FIJO
-        </h2>
+        <div class="edit-point-grid">
+          <label>
+            <span> IDENTIFICADOR </span>
+
+            <input v-model="editPoint.point_id" maxlength="10" />
+          </label>
+
+          <label>
+            <span> TIPO </span>
+
+            <input v-model="editPoint.point_type" />
+          </label>
+
+          <label class="full-field">
+            <span> POSICIÓN DMS </span>
+
+            <input v-model="editPoint.raw" placeholder="173902N0890945W" />
+          </label>
+
+          <label>
+            <span> LATITUD </span>
+
+            <input v-model="editPoint.latitude" type="number" step="0.00000001" />
+          </label>
+
+          <label>
+            <span> LONGITUD </span>
+
+            <input v-model="editPoint.longitude" type="number" step="0.00000001" />
+          </label>
+
+          <label>
+            <span> AEROPUERTO </span>
+
+            <input v-model="editPoint.airport_id" />
+          </label>
+
+          <label class="checkbox-field">
+            <input v-model="editPoint.relevant_fix" type="checkbox" />
+
+            <span> FIJO RELEVANTE </span>
+          </label>
+
+          <label class="full-field">
+            <span> COMENTARIO </span>
+
+            <textarea v-model="editPoint.comment" rows="3"></textarea>
+          </label>
+        </div>
+
+        <!-- AEROVÍAS AFECTADAS -->
+
+        <div class="affected-routes">
+          <span class="affected-title"> AEROVÍAS AFECTADAS </span>
+
+          <div v-if="pointRoutes.length" class="affected-list">
+            <span v-for="route in pointRoutes" :key="route._id">
+              {{ route.route_name }}
+            </span>
+          </div>
+
+          <small v-else> Este fijo no pertenece a ninguna aerovía. </small>
+        </div>
+
+        <!-- ERROR -->
+
+        <div v-if="editPointError" class="edit-point-error">
+          {{ editPointError }}
+        </div>
+
+        <!-- CORRECTO -->
+
+        <div v-if="editPointSuccess" class="edit-point-success">
+          {{ editPointSuccess }}
+        </div>
+
+        <!-- BOTONES -->
+
+        <div class="edit-point-actions">
+          <button class="cancel-edit-button" :disabled="editPointSaving" @click="closeEditPoint">
+            CANCELAR
+          </button>
+
+          <button class="save-edit-button" :disabled="editPointSaving" @click="saveEditPoint">
+            {{ editPointSaving ? 'GUARDANDO...' : 'GUARDAR CAMBIOS' }}
+          </button>
+        </div>
       </div>
-
-      <button
-        class="edit-point-close"
-        @click="closeEditPoint"
-      >
-        ×
-      </button>
-
     </div>
-
-
-    <!-- CAMPOS -->
-
-    <div class="edit-point-grid">
-
-      <label>
-
-        <span>
-          IDENTIFICADOR
-        </span>
-
-        <input
-          v-model="editPoint.point_id"
-          maxlength="10"
-        />
-
-      </label>
-
-
-      <label>
-
-        <span>
-          TIPO
-        </span>
-
-        <input
-          v-model="editPoint.point_type"
-        />
-
-      </label>
-
-
-      <label class="full-field">
-
-        <span>
-          POSICIÓN DMS
-        </span>
-
-        <input
-          v-model="editPoint.raw"
-          placeholder="173902N0890945W"
-        />
-
-      </label>
-
-
-      <label>
-
-        <span>
-          LATITUD
-        </span>
-
-        <input
-          v-model="editPoint.latitude"
-          type="number"
-          step="0.00000001"
-        />
-
-      </label>
-
-
-      <label>
-
-        <span>
-          LONGITUD
-        </span>
-
-        <input
-          v-model="editPoint.longitude"
-          type="number"
-          step="0.00000001"
-        />
-
-      </label>
-
-
-      <label>
-
-        <span>
-          AEROPUERTO
-        </span>
-
-        <input
-          v-model="editPoint.airport_id"
-        />
-
-      </label>
-
-
-      <label class="checkbox-field">
-
-        <input
-          v-model="editPoint.relevant_fix"
-          type="checkbox"
-        />
-
-        <span>
-          FIJO RELEVANTE
-        </span>
-
-      </label>
-
-
-      <label class="full-field">
-
-        <span>
-          COMENTARIO
-        </span>
-
-        <textarea
-          v-model="editPoint.comment"
-          rows="3"
-        ></textarea>
-
-      </label>
-
-    </div>
-
-
-    <!-- AEROVÍAS AFECTADAS -->
-
-    <div class="affected-routes">
-
-      <span class="affected-title">
-        AEROVÍAS AFECTADAS
-      </span>
-
-      <div
-        v-if="pointRoutes.length"
-        class="affected-list"
-      >
-
-        <span
-          v-for="route in pointRoutes"
-          :key="route._id"
-        >
-          {{ route.route_name }}
-        </span>
-
-      </div>
-
-      <small v-else>
-        Este fijo no pertenece a ninguna aerovía.
-      </small>
-
-    </div>
-
-
-    <!-- ERROR -->
-
-    <div
-      v-if="editPointError"
-      class="edit-point-error"
-    >
-      {{ editPointError }}
-    </div>
-
-
-    <!-- CORRECTO -->
-
-    <div
-      v-if="editPointSuccess"
-      class="edit-point-success"
-    >
-      {{ editPointSuccess }}
-    </div>
-
-
-    <!-- BOTONES -->
-
-    <div class="edit-point-actions">
-
-      <button
-        class="cancel-edit-button"
-        :disabled="editPointSaving"
-        @click="closeEditPoint"
-      >
-        CANCELAR
-      </button>
-
-
-      <button
-        class="save-edit-button"
-        :disabled="editPointSaving"
-        @click="saveEditPoint"
-      >
-
-        {{
-          editPointSaving
-            ? 'GUARDANDO...'
-            : 'GUARDAR CAMBIOS'
-        }}
-
-      </button>
-
-    </div>
-  </div>
-</div>
 
     <!-- =====================================
       GRUPOS DE AEROVÍAS
       SOLO MODO AEROVÍA
     ====================================== -->
 
-    <div
-      v-if="searchMode === 'route'"
-      class="groups-section"
-    >
+    <div v-if="searchMode === 'route'" class="groups-section">
+      <div class="groups-title">GRUPOS DE AEROVÍAS</div>
 
-      <div class="groups-title">
-        GRUPOS DE AEROVÍAS
-      </div>
-
-      <div
-        v-if="groups.length"
-        class="groups"
-      >
-
+      <div v-if="groups.length" class="groups">
         <button
           v-for="group in groups"
           :key="group.group"
           class="group-button"
           :class="{
-            active:
-              selectedGroup === group.group
+            active: selectedGroup === group.group,
           }"
           @click="selectGroup(group.group)"
         >
-
           <strong>
             {{ group.group }}
           </strong>
@@ -372,61 +208,31 @@
           <span>
             {{ group.total }}
           </span>
-
         </button>
-
       </div>
 
-      <div
-        v-else-if="!loading"
-        class="no-groups"
-      >
-        No se encontraron grupos.
-      </div>
-
+      <div v-else-if="!loading" class="no-groups">No se encontraron grupos.</div>
     </div>
-
 
     <!-- =====================================
         INFORMACIÓN DEL FIJO
     ====================================== -->
 
-    <div
-      v-if="
-        searchMode === 'point' &&
-        selectedPoint
-      "
-      class="point-information"
-    >
-
+    <div v-if="searchMode === 'point' && selectedPoint" class="point-information">
       <div class="point-information-main">
-
-        <div class="point-symbol">
-          +
-        </div>
+        <div class="point-symbol">+</div>
 
         <div>
-
-          <span class="point-caption">
-            FIJO SELECCIONADO
-          </span>
+          <span class="point-caption"> FIJO SELECCIONADO </span>
 
           <strong class="point-title">
             {{ selectedPoint.point_id }}
           </strong>
-
         </div>
       </div>
-      <button
-  class="edit-point-button"
-  @click="openEditPoint"
->
-  ✎ MODIFICAR FIJO
-</button>
-
+      <button class="edit-point-button" @click="openEditPoint">✎ MODIFICAR FIJO</button>
 
       <div class="point-data">
-
         <div>
           <span>TIPO</span>
 
@@ -447,9 +253,7 @@
           <span>LATITUD</span>
 
           <strong>
-            {{ formatCoordinate(
-              selectedPoint.position?.latitude
-            ) }}
+            {{ formatCoordinate(selectedPoint.position?.latitude) }}
           </strong>
         </div>
 
@@ -457,9 +261,7 @@
           <span>LONGITUD</span>
 
           <strong>
-            {{ formatCoordinate(
-              selectedPoint.position?.longitude
-            ) }}
+            {{ formatCoordinate(selectedPoint.position?.longitude) }}
           </strong>
         </div>
 
@@ -470,68 +272,37 @@
             {{ pointRoutes.length }}
           </strong>
         </div>
-
       </div>
-
     </div>
-
 
     <!-- =====================================
          ERROR DE BÚSQUEDA DE FIJO
     ====================================== -->
 
-    <div
-      v-if="
-        searchMode === 'point' &&
-        pointError
-      "
-      class="point-search-error"
-    >
+    <div v-if="searchMode === 'point' && pointError" class="point-search-error">
       {{ pointError }}
     </div>
-
 
     <!-- =====================================
          MAPA + PANEL
     ====================================== -->
 
     <div class="map-layout">
-
       <!-- =================================
            MAPA
       ================================== -->
 
       <div class="map-container">
-
-        <div
-          ref="mapElement"
-          class="map"
-        ></div>
-
+        <div ref="mapElement" class="map"></div>
 
         <!-- CARGANDO -->
 
-        <div
-          v-if="routeLoading"
-          class="loading"
-        >
-          Cargando {{ selectedRoute }}...
-        </div>
-
+        <div v-if="routeLoading" class="loading">Cargando {{ selectedRoute }}...</div>
 
         <!-- RUTA SELECCIONADA -->
 
-        <div
-          v-if="
-            selectedRoute &&
-            !routeLoading
-          "
-          class="selected-route-card"
-        >
-
-          <span>
-            AEROVÍA
-          </span>
+        <div v-if="selectedRoute && !routeLoading" class="selected-route-card">
+          <span> AEROVÍA </span>
 
           <strong>
             {{ selectedRoute }}
@@ -541,23 +312,12 @@
             {{ selectedRoutePoints }}
             puntos
           </small>
-
         </div>
-
 
         <!-- FIJO SELECCIONADO -->
 
-        <div
-          v-if="
-            searchMode === 'point' &&
-            selectedPoint
-          "
-          class="selected-point-card"
-        >
-
-          <span>
-            FIJO
-          </span>
+        <div v-if="searchMode === 'point' && selectedPoint" class="selected-point-card">
+          <span> FIJO </span>
 
           <strong>
             {{ selectedPoint.point_id }}
@@ -567,34 +327,20 @@
             {{ pointRoutes.length }}
             aerovías
           </small>
-
         </div>
-
 
         <!-- LIMPIAR MAPA -->
 
-        <button
-          v-if="
-            selectedRoute ||
-            selectedPoint
-          "
-          class="clear-map-button"
-          @click="clearMap"
-        >
+        <button v-if="selectedRoute || selectedPoint" class="clear-map-button" @click="clearMap">
           × LIMPIAR MAPA
         </button>
-
 
         <!-- ESTADO -->
 
         <div class="map-status">
-
-          <div>
-            RED ATCFPL
-          </div>
+          <div>RED ATCFPL</div>
 
           <template v-if="selectedRoute">
-
             <strong>
               {{ selectedRoute }}
             </strong>
@@ -603,11 +349,9 @@
               {{ selectedRoutePoints }}
               puntos
             </span>
-
           </template>
 
           <template v-else-if="selectedPoint">
-
             <strong>
               {{ selectedPoint.point_id }}
             </strong>
@@ -616,52 +360,33 @@
               {{ pointRoutes.length }}
               aerovías
             </span>
-
           </template>
 
           <template v-else>
+            <strong> 0 </strong>
 
-            <strong>
-              0
-            </strong>
-
-            <span>
-              aerovías
-            </span>
-
+            <span> aerovías </span>
           </template>
-
         </div>
-
 
         <!-- ERROR MAPA -->
 
-        <div
-          v-if="routeError"
-          class="map-error"
-        >
+        <div v-if="routeError" class="map-error">
           {{ routeError }}
         </div>
-
       </div>
-
 
       <!-- =================================
            PANEL DERECHO
       ================================== -->
 
       <aside class="route-panel">
-
         <!-- MODO AEROVÍA -->
 
         <template v-if="searchMode === 'route'">
-
           <div class="panel-header">
-
             <div>
-              <span>
-                AEROVÍAS
-              </span>
+              <span> AEROVÍAS </span>
 
               <strong v-if="selectedGroup">
                 {{ selectedGroup }}
@@ -671,68 +396,34 @@
             <strong class="panel-count">
               {{ filteredRoutes.length }}
             </strong>
-
           </div>
 
+          <div v-if="loading" class="panel-message">Cargando aerovías...</div>
 
-          <div
-            v-if="loading"
-            class="panel-message"
-          >
-            Cargando aerovías...
-          </div>
-
-
-          <div
-            v-else-if="loadError"
-            class="panel-error"
-          >
+          <div v-else-if="loadError" class="panel-error">
             {{ loadError }}
           </div>
 
-
-          <div
-            v-else-if="
-              !selectedGroup &&
-              !search
-            "
-            class="panel-message"
-          >
-            <span class="arrow-up">
-              ↑
-            </span>
+          <div v-else-if="!selectedGroup && !search" class="panel-message">
+            <span class="arrow-up"> ↑ </span>
 
             Selecciona un grupo.
           </div>
 
-
-          <div
-            v-else-if="
-              filteredRoutes.length === 0
-            "
-            class="panel-message"
-          >
+          <div v-else-if="filteredRoutes.length === 0" class="panel-message">
             No se encontraron aerovías.
           </div>
 
-
-          <div
-            v-else
-            class="route-list"
-          >
-
+          <div v-else class="route-list">
             <button
               v-for="route in filteredRoutes"
               :key="route._id"
               class="route-item"
               :class="{
-                selected:
-                  selectedRoute ===
-                  route.route_name
+                selected: selectedRoute === route.route_name,
               }"
               @click="selectRoute(route)"
             >
-
               <div>
                 <strong>
                   {{ route.route_name }}
@@ -747,26 +438,18 @@
               <span class="group-badge">
                 {{ route.group }}
               </span>
-
             </button>
-
           </div>
-
         </template>
-
 
         <!-- =================================
              MODO FIJO
         ================================== -->
 
         <template v-else>
-
           <div class="panel-header">
-
             <div>
-              <span>
-                AEROVÍAS DEL FIJO
-              </span>
+              <span> AEROVÍAS DEL FIJO </span>
 
               <strong v-if="selectedPoint">
                 {{ selectedPoint.point_id }}
@@ -776,74 +459,37 @@
             <strong class="panel-count">
               {{ pointRoutes.length }}
             </strong>
-
           </div>
 
+          <div v-if="pointLoading" class="panel-message">Buscando fijo...</div>
 
-          <div
-            v-if="pointLoading"
-            class="panel-message"
-          >
-            Buscando fijo...
-          </div>
-
-
-          <div
-            v-else-if="pointError"
-            class="panel-error"
-          >
+          <div v-else-if="pointError" class="panel-error">
             {{ pointError }}
           </div>
 
-
-          <div
-            v-else-if="!selectedPoint"
-            class="panel-message"
-          >
-
-            <span class="point-search-symbol">
-              +
-            </span>
+          <div v-else-if="!selectedPoint" class="panel-message">
+            <span class="point-search-symbol"> + </span>
 
             Escribe el nombre de un fijo.
 
-            <small>
-              Ejemplo: KINAL
-            </small>
-
+            <small> Ejemplo: KINAL </small>
           </div>
 
-
-          <div
-            v-else-if="pointRoutes.length === 0"
-            class="panel-message"
-          >
-
-            El fijo no pertenece a ninguna
-            aerovía.
-
+          <div v-else-if="pointRoutes.length === 0" class="panel-message">
+            El fijo no pertenece a ninguna aerovía.
           </div>
 
-
-          <div
-            v-else
-            class="route-list"
-          >
-
+          <div v-else class="route-list">
             <button
               v-for="route in pointRoutes"
               :key="route._id"
               class="route-item"
               :class="{
-                selected:
-                  selectedRoute ===
-                  route.route_name
+                selected: selectedRoute === route.route_name,
               }"
               @click="selectPointRoute(route)"
             >
-
               <div>
-
                 <strong>
                   {{ route.route_name }}
                 </strong>
@@ -852,106 +498,75 @@
                   {{ route.total_points }}
                   puntos
                 </span>
-
               </div>
 
               <span class="group-badge">
                 {{ route.group }}
               </span>
-
             </button>
-
           </div>
-
         </template>
-
       </aside>
-
     </div>
-
   </div>
 </template>
 
-
 <script setup>
+import { API_URL } from '../config'
 
-import {
-  ref,
-  computed,
-  onMounted,
-  onUnmounted,
-  nextTick
-} from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 
 import L from 'leaflet'
 
 import 'leaflet/dist/leaflet.css'
 
-
 // =====================================
 // API
 // =====================================
 
-const API =
-  'http://localhost:3000/api'
-
+//const API = 'http://localhost:3000/api'
+const API = API_URL
+console.log('ATCFPL API:', API)
 
 // =====================================
 // VARIABLES GENERALES
 // =====================================
 
-const mapElement =
-  ref(null)
+const mapElement = ref(null)
 
-const routes =
-  ref([])
+const routes = ref([])
 
-const groups =
-  ref([])
+const groups = ref([])
 
-const search =
-  ref('')
+const search = ref('')
 
-const searchMode =
-  ref('route')
+const searchMode = ref('route')
 
-const selectedGroup =
-  ref('')
+const selectedGroup = ref('')
 
-const selectedRoute =
-  ref('')
+const selectedRoute = ref('')
 
-const selectedRoutePoints =
-  ref(0)
+const selectedRoutePoints = ref(0)
 
-const loading =
-  ref(true)
+const loading = ref(true)
 
-const routeLoading =
-  ref(false)
+const routeLoading = ref(false)
 
-const loadError =
-  ref('')
+const loadError = ref('')
 
-const routeError =
-  ref('')
-
+const routeError = ref('')
 
 // =====================================
 // VARIABLES PARA FIJOS
 // =====================================
 
-const selectedPoint =
-  ref(null)
+const selectedPoint = ref(null)
 
-const pointRoutes =
-  ref([])
+const pointRoutes = ref([])
 
-const pointLoading =
-  ref(false)
+const pointLoading = ref(false)
 
-const pointError =
-  ref('')
+const pointError = ref('')
 
 // =====================================
 // EDICIÓN DE FIJO
@@ -971,10 +586,8 @@ const editPoint = ref({
   point_type: '',
   relevant_fix: false,
   airport_id: '',
-  comment: ''
+  comment: '',
 })
-
-
 
 // =====================================
 // LEAFLET
@@ -986,550 +599,318 @@ let routeLayer = null
 
 let pointLayer = null
 
-
 // =====================================
 // PLACEHOLDER
 // =====================================
 
-const searchPlaceholder =
-  computed(() => {
+const searchPlaceholder = computed(() => {
+  if (searchMode.value === 'point') {
+    return 'Buscar fijo: KINAL, CUL, MZT...'
+  }
 
-    if (
-      searchMode.value ===
-      'point'
-    ) {
-
-      return 'Buscar fijo: KINAL, CUL, MZT...'
-
-    }
-
-    return 'Buscar aerovía: A552, J13, UJ...'
-
-  })
-
+  return 'Buscar aerovía: A552, J13, UJ...'
+})
 
 // =====================================
 // FILTRAR RUTAS
 // =====================================
 
-const filteredRoutes =
-  computed(() => {
+const filteredRoutes = computed(() => {
+  if (searchMode.value !== 'route') {
+    return []
+  }
 
-    if (
-      searchMode.value !==
-      'route'
-    ) {
+  const text = search.value.trim().toUpperCase()
 
-      return []
+  // BUSCADOR GLOBAL
 
-    }
+  if (text) {
+    return routes.value.filter((route) => {
+      const name = String(route.route_name || '').toUpperCase()
 
-    const text =
-      search.value
-        .trim()
-        .toUpperCase()
+      return name.includes(text)
+    })
+  }
 
+  // SIN GRUPO
 
-    // BUSCADOR GLOBAL
+  if (!selectedGroup.value) {
+    return []
+  }
+  //
 
-    if (text) {
+  // GRUPO SELECCIONADO
 
-      return routes.value.filter(
-        (route) => {
-
-          const name =
-            String(
-              route.route_name || ''
-            )
-              .toUpperCase()
-
-          return name.includes(text)
-
-        }
-      )
-
-    }
-
-
-    // SIN GRUPO
-
-    if (!selectedGroup.value) {
-
-      return []
-
-    }
-//
-
-    // GRUPO SELECCIONADO
-
-    return routes.value.filter(
-      (route) => {
-
-        return (
-          route.group ===
-          selectedGroup.value
-        )
-
-      }
-    )
-
+  return routes.value.filter((route) => {
+    return route.group === selectedGroup.value
   })
-
+})
 
 // =====================================
 // CAMBIAR MODO DE BÚSQUEDA
 // =====================================
 
-const setSearchMode =
-  (mode) => {
+const setSearchMode = (mode) => {
+  if (searchMode.value === mode) {
+    return
+  }
 
-    if (
-      searchMode.value === mode
-    ) {
+  searchMode.value = mode
 
-      return
+  search.value = ''
 
+  selectedGroup.value = ''
+
+  selectedRoute.value = ''
+
+  selectedRoutePoints.value = 0
+
+  selectedPoint.value = null
+
+  pointRoutes.value = []
+
+  pointError.value = ''
+
+  routeError.value = ''
+
+  clearRouteLayer()
+
+  clearPointLayer()
+
+  resetMap()
+}
+
+// =====================================
+// EJECUTAR BÚSQUEDA ENTER
+// =====================================
+
+const executeSearch = () => {
+  if (searchMode.value === 'point') {
+    searchPoint()
+  }
+}
+
+// =====================================
+// CREAR MAPA
+// =====================================
+
+const createMap = async () => {
+  await nextTick()
+
+  if (!mapElement.value) {
+    return
+  }
+
+  map = L.map(mapElement.value, {
+    preferCanvas: true,
+    zoomControl: true,
+
+    // México, USA, Centroamérica y Cuba
+    maxBounds: [
+      [5, -130],
+      [52, -55],
+    ],
+
+    maxBoundsViscosity: 0.8,
+  }).setView([23.6345, -102.5528], 5)
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(map)
+}
+
+// =====================================
+// CARGAR RUTAS
+// =====================================
+
+const loadRoutes = async () => {
+  try {
+    loading.value = true
+
+    loadError.value = ''
+
+    const response = await fetch(`${API}/routes`)
+
+    if (!response.ok) {
+      throw new Error('No se pudieron cargar las aerovías')
     }
 
-    searchMode.value = mode
+    const data = await response.json()
 
-    search.value = ''
+    routes.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error(error)
 
-    selectedGroup.value = ''
+    loadError.value = 'No se pudieron cargar las aerovías.'
+  } finally {
+    loading.value = false
+  }
+}
 
-    selectedRoute.value = ''
+// =====================================
+// CARGAR GRUPOS
+// =====================================
 
-    selectedRoutePoints.value = 0
+const loadGroups = async () => {
+  try {
+    const response = await fetch(`${API}/routes/groups`)
 
+    if (!response.ok) {
+      throw new Error('No se pudieron cargar los grupos')
+    }
+
+    const data = await response.json()
+
+    groups.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('Error cargando grupos:', error)
+  }
+}
+
+// =====================================
+// SELECCIONAR GRUPO
+// =====================================
+
+const selectGroup = (group) => {
+  selectedGroup.value = group
+
+  search.value = ''
+}
+
+// =====================================
+// LIMPIAR BÚSQUEDA
+// =====================================
+
+const clearSearch = () => {
+  search.value = ''
+
+  pointError.value = ''
+
+  if (searchMode.value === 'point') {
     selectedPoint.value = null
 
     pointRoutes.value = []
 
-    pointError.value = ''
+    selectedRoute.value = ''
 
-    routeError.value = ''
+    selectedRoutePoints.value = 0
 
     clearRouteLayer()
 
     clearPointLayer()
 
     resetMap()
-
   }
-
-
-// =====================================
-// EJECUTAR BÚSQUEDA ENTER
-// =====================================
-
-const executeSearch =
-  () => {
-
-    if (
-      searchMode.value ===
-      'point'
-    ) {
-
-      searchPoint()
-
-    }
-
-  }
-
-
-// =====================================
-// CREAR MAPA
-// =====================================
-
-const createMap =
-  async () => {
-
-    await nextTick()
-
-    if (!mapElement.value) {
-
-      return
-
-    }
-
-    map =
-      L.map(
-        mapElement.value,
-        {
-          preferCanvas: true,
-          zoomControl: true,
-
-          // México, USA, Centroamérica y Cuba
-          maxBounds: [
-            [5, -130],
-            [52, -55]
-          ],
-
-          maxBoundsViscosity: 0.8
-        }
-      )
-        .setView(
-          [
-            23.6345,
-            -102.5528
-          ],
-          5
-        )
-
-
-    L.tileLayer(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 19,
-        attribution:
-          '&copy; OpenStreetMap'
-      }
-    )
-      .addTo(map)
-
-  }
-
-
-// =====================================
-// CARGAR RUTAS
-// =====================================
-
-const loadRoutes =
-  async () => {
-
-    try {
-
-      loading.value = true
-
-      loadError.value = ''
-
-      const response =
-        await fetch(
-          `${API}/routes`
-        )
-
-      if (!response.ok) {
-
-        throw new Error(
-          'No se pudieron cargar las aerovías'
-        )
-
-      }
-
-      const data =
-        await response.json()
-
-      routes.value =
-        Array.isArray(data)
-          ? data
-          : []
-
-    } catch (error) {
-
-      console.error(error)
-
-      loadError.value =
-        'No se pudieron cargar las aerovías.'
-
-    } finally {
-
-      loading.value = false
-
-    }
-
-  }
-
-
-// =====================================
-// CARGAR GRUPOS
-// =====================================
-
-const loadGroups =
-  async () => {
-
-    try {
-
-      const response =
-        await fetch(
-          `${API}/routes/groups`
-        )
-
-      if (!response.ok) {
-
-        throw new Error(
-          'No se pudieron cargar los grupos'
-        )
-
-      }
-
-      const data =
-        await response.json()
-
-      groups.value =
-        Array.isArray(data)
-          ? data
-          : []
-
-    } catch (error) {
-
-      console.error(
-        'Error cargando grupos:',
-        error
-      )
-
-    }
-
-  }
-
-
-// =====================================
-// SELECCIONAR GRUPO
-// =====================================
-
-const selectGroup =
-  (group) => {
-
-    selectedGroup.value =
-      group
-
-    search.value =
-      ''
-
-  }
-
-
-// =====================================
-// LIMPIAR BÚSQUEDA
-// =====================================
-
-const clearSearch =
-  () => {
-
-    search.value = ''
-
-    pointError.value = ''
-
-    if (
-      searchMode.value ===
-      'point'
-    ) {
-
-      selectedPoint.value = null
-
-      pointRoutes.value = []
-
-      selectedRoute.value = ''
-
-      selectedRoutePoints.value = 0
-
-      clearRouteLayer()
-
-      clearPointLayer()
-
-      resetMap()
-
-    }
-
-  }
-
+}
 
 // =====================================
 // BUSCAR FIJO
 // =====================================
 
-const searchPoint =
-  async () => {
+const searchPoint = async () => {
+  const pointId = search.value.trim().toUpperCase()
 
-    const pointId =
-      search.value
-        .trim()
-        .toUpperCase()
-
-    if (!pointId) {
-
-      return
-
-    }
-
-    try {
-
-      pointLoading.value = true
-
-      pointError.value = ''
-
-      selectedPoint.value = null
-
-      pointRoutes.value = []
-
-      selectedRoute.value = ''
-
-      selectedRoutePoints.value = 0
-
-      clearRouteLayer()
-
-      clearPointLayer()
-
-
-      const response =
-        await fetch(
-          `${API}/characteristic-points/${encodeURIComponent(pointId)}/routes`
-        )
-
-
-      const data =
-        await response
-          .json()
-          .catch(
-            () => ({})
-          )
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          `No se encontró el fijo ${pointId}`
-        )
-
-      }
-
-
-      selectedPoint.value =
-        data.point || null
-
-
-      pointRoutes.value =
-        Array.isArray(data.routes)
-          ? data.routes
-          : []
-
-
-      if (
-        selectedPoint.value
-      ) {
-
-        drawSelectedPoint(
-          selectedPoint.value
-        )
-
-      }
-
-    } catch (error) {
-
-      console.error(
-        'Error buscando fijo:',
-        error
-      )
-
-      pointError.value =
-        error.message
-
-    } finally {
-
-      pointLoading.value = false
-
-    }
-
+  if (!pointId) {
+    return
   }
 
+  try {
+    pointLoading.value = true
+
+    pointError.value = ''
+
+    selectedPoint.value = null
+
+    pointRoutes.value = []
+
+    selectedRoute.value = ''
+
+    selectedRoutePoints.value = 0
+
+    clearRouteLayer()
+
+    clearPointLayer()
+
+    const response = await fetch(
+      `${API}/characteristic-points/${encodeURIComponent(pointId)}/routes`,
+    )
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data.error || `No se encontró el fijo ${pointId}`)
+    }
+
+    selectedPoint.value = data.point || null
+
+    pointRoutes.value = Array.isArray(data.routes) ? data.routes : []
+
+    if (selectedPoint.value) {
+      drawSelectedPoint(selectedPoint.value)
+    }
+  } catch (error) {
+    console.error('Error buscando fijo:', error)
+
+    pointError.value = error.message
+  } finally {
+    pointLoading.value = false
+  }
+}
 
 // =====================================
 // DIBUJAR FIJO SELECCIONADO
 // =====================================
 
-const drawSelectedPoint =
-  (point) => {
+const drawSelectedPoint = (point) => {
+  if (!map || !point) {
+    return
+  }
 
-    if (!map || !point) {
+  clearPointLayer()
 
-      return
+  const latitude = Number(point.position?.latitude)
 
-    }
+  const longitude = Number(point.position?.longitude)
 
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    pointError.value = 'El fijo no tiene coordenadas válidas.'
 
-    clearPointLayer()
+    return
+  }
 
+  pointLayer = L.layerGroup().addTo(map)
 
-    const latitude =
-      Number(
-        point.position?.latitude
-      )
+  // CÍRCULO EXTERIOR
 
-    const longitude =
-      Number(
-        point.position?.longitude
-      )
+  L.circleMarker([latitude, longitude], {
+    radius: 13,
+    color: '#ffd54f',
+    weight: 2,
+    fillColor: '#ffd54f',
+    fillOpacity: 0.08,
+    opacity: 0.8,
+  }).addTo(pointLayer)
 
+  // PUNTO CENTRAL
 
-    if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
-    ) {
+  const marker = L.circleMarker([latitude, longitude], {
+    radius: 6,
+    color: '#ffd54f',
+    weight: 3,
+    fillColor: '#07131f',
+    fillOpacity: 1,
+    opacity: 1,
+  })
 
-      pointError.value =
-        'El fijo no tiene coordenadas válidas.'
+  marker.bindTooltip(point.point_id, {
+    permanent: true,
+    direction: 'top',
+    offset: [0, -9],
+    className: 'selected-point-label',
+  })
 
-      return
-
-    }
-
-
-    pointLayer =
-      L.layerGroup()
-        .addTo(map)
-
-
-    // CÍRCULO EXTERIOR
-
-    L.circleMarker(
-      [
-        latitude,
-        longitude
-      ],
-      {
-        radius: 13,
-        color: '#ffd54f',
-        weight: 2,
-        fillColor: '#ffd54f',
-        fillOpacity: 0.08,
-        opacity: 0.8
-      }
-    )
-      .addTo(pointLayer)
-
-
-    // PUNTO CENTRAL
-
-    const marker =
-      L.circleMarker(
-        [
-          latitude,
-          longitude
-        ],
-        {
-          radius: 6,
-          color: '#ffd54f',
-          weight: 3,
-          fillColor: '#07131f',
-          fillOpacity: 1,
-          opacity: 1
-        }
-      )
-
-
-    marker.bindTooltip(
-      point.point_id,
-      {
-        permanent: true,
-        direction: 'top',
-        offset: [0, -9],
-        className:
-          'selected-point-label'
-      }
-    )
-
-
-    marker.bindPopup(`
+  marker.bindPopup(`
       <div class="atc-popup">
 
         <div class="popup-type">
@@ -1580,437 +961,223 @@ const drawSelectedPoint =
       </div>
     `)
 
+  marker.addTo(pointLayer)
 
-    marker.addTo(
-      pointLayer
-    )
-
-
-    map.setView(
-      [
-        latitude,
-        longitude
-      ],
-      7
-    )
-
-  }
-
+  map.setView([latitude, longitude], 7)
+}
 
 // =====================================
 // SELECCIONAR RUTA NORMAL
 // =====================================
 
-const selectRoute =
-  async (route) => {
+const selectRoute = async (route) => {
+  const routeName = String(route.route_name || '')
+    .trim()
+    .toUpperCase()
 
-    const routeName =
-      String(
-        route.route_name || ''
-      )
-        .trim()
-        .toUpperCase()
-
-    if (!routeName) {
-
-      return
-
-    }
-
-    selectedRoute.value =
-      routeName
-
-    await loadRoute(
-      routeName
-    )
-
+  if (!routeName) {
+    return
   }
 
+  selectedRoute.value = routeName
+
+  await loadRoute(routeName)
+}
 
 // =====================================
 // SELECCIONAR RUTA DESDE FIJO
 // =====================================
 
-const selectPointRoute =
-  async (route) => {
+const selectPointRoute = async (route) => {
+  const routeName = String(route.route_name || '')
+    .trim()
+    .toUpperCase()
 
-    const routeName =
-      String(
-        route.route_name || ''
-      )
-        .trim()
-        .toUpperCase()
-
-    if (!routeName) {
-
-      return
-
-    }
-
-
-    selectedRoute.value =
-      routeName
-
-
-    await loadRoute(
-      routeName
-    )
-
-
-    // Volvemos a colocar el fijo por encima
-    // de la aerovía.
-
-    if (
-      selectedPoint.value
-    ) {
-
-      drawSelectedPointWithoutZoom(
-        selectedPoint.value
-      )
-
-    }
-
+  if (!routeName) {
+    return
   }
 
+  selectedRoute.value = routeName
+
+  await loadRoute(routeName)
+
+  // Volvemos a colocar el fijo por encima
+  // de la aerovía.
+
+  if (selectedPoint.value) {
+    drawSelectedPointWithoutZoom(selectedPoint.value)
+  }
+}
 
 // =====================================
 // CARGAR UNA SOLA AEROVÍA
 // =====================================
 
-const loadRoute =
-  async (routeName) => {
+const loadRoute = async (routeName) => {
+  try {
+    routeLoading.value = true
 
-    try {
+    routeError.value = ''
 
-      routeLoading.value =
-        true
+    selectedRoutePoints.value = 0
 
-      routeError.value =
-        ''
+    clearRouteLayer()
 
-      selectedRoutePoints.value =
-        0
+    const response = await fetch(`${API}/routes/${encodeURIComponent(routeName)}/map`)
 
-      clearRouteLayer()
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
 
-
-      const response =
-        await fetch(
-          `${API}/routes/${encodeURIComponent(routeName)}/map`
-        )
-
-
-      if (!response.ok) {
-
-        const errorData =
-          await response
-            .json()
-            .catch(
-              () => ({})
-            )
-
-        throw new Error(
-          errorData.error ||
-          `No se pudo cargar ${routeName}`
-        )
-
-      }
-
-
-      const data =
-        await response.json()
-
-
-      const points =
-        Array.isArray(
-          data.points
-        )
-          ? data.points
-          : []
-
-
-      selectedRoutePoints.value =
-        points.length
-
-
-      drawRoute(
-        routeName,
-        points
-      )
-
-
-      if (
-        data.missing_points?.length
-      ) {
-
-        console.warn(
-          'Puntos sin coordenadas:',
-          data.missing_points
-        )
-
-      }
-
-    } catch (error) {
-
-      console.error(error)
-
-      routeError.value =
-        error.message
-
-    } finally {
-
-      routeLoading.value =
-        false
-
+      throw new Error(errorData.error || `No se pudo cargar ${routeName}`)
     }
 
-  }
+    const data = await response.json()
 
+    const points = Array.isArray(data.points) ? data.points : []
+
+    selectedRoutePoints.value = points.length
+
+    drawRoute(routeName, points)
+
+    if (data.missing_points?.length) {
+      console.warn('Puntos sin coordenadas:', data.missing_points)
+    }
+  } catch (error) {
+    console.error(error)
+
+    routeError.value = error.message
+  } finally {
+    routeLoading.value = false
+  }
+}
 
 // =====================================
 // BORRAR CAPA DE RUTA
 // =====================================
 
-const clearRouteLayer =
-  () => {
+const clearRouteLayer = () => {
+  if (map && routeLayer) {
+    map.removeLayer(routeLayer)
 
-    if (
-      map &&
-      routeLayer
-    ) {
-
-      map.removeLayer(
-        routeLayer
-      )
-
-      routeLayer = null
-
-    }
-
+    routeLayer = null
   }
-
+}
 
 // =====================================
 // BORRAR CAPA DEL FIJO
 // =====================================
 
-const clearPointLayer =
-  () => {
+const clearPointLayer = () => {
+  if (map && pointLayer) {
+    map.removeLayer(pointLayer)
 
-    if (
-      map &&
-      pointLayer
-    ) {
-
-      map.removeLayer(
-        pointLayer
-      )
-
-      pointLayer = null
-
-    }
-
+    pointLayer = null
   }
-
+}
 
 // =====================================
 // DIBUJAR FIJO SIN CAMBIAR ZOOM
 // =====================================
 
-const drawSelectedPointWithoutZoom =
-  (point) => {
-
-    if (!map || !point) {
-
-      return
-
-    }
-
-
-    clearPointLayer()
-
-
-    const latitude =
-      Number(
-        point.position?.latitude
-      )
-
-    const longitude =
-      Number(
-        point.position?.longitude
-      )
-
-
-    if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
-    ) {
-
-      return
-
-    }
-
-
-    pointLayer =
-      L.layerGroup()
-        .addTo(map)
-
-
-    L.circleMarker(
-      [
-        latitude,
-        longitude
-      ],
-      {
-        radius: 14,
-        color: '#ffd54f',
-        weight: 2,
-        fillColor: '#ffd54f',
-        fillOpacity: 0.08,
-        opacity: 0.9
-      }
-    )
-      .addTo(pointLayer)
-
-
-    const marker =
-      L.circleMarker(
-        [
-          latitude,
-          longitude
-        ],
-        {
-          radius: 6,
-          color: '#ffd54f',
-          weight: 3,
-          fillColor: '#07131f',
-          fillOpacity: 1
-        }
-      )
-
-
-    marker.bindTooltip(
-      point.point_id,
-      {
-        permanent: true,
-        direction: 'top',
-        offset: [0, -9],
-        className:
-          'selected-point-label'
-      }
-    )
-
-
-    marker.addTo(
-      pointLayer
-    )
-
+const drawSelectedPointWithoutZoom = (point) => {
+  if (!map || !point) {
+    return
   }
 
+  clearPointLayer()
+
+  const latitude = Number(point.position?.latitude)
+
+  const longitude = Number(point.position?.longitude)
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return
+  }
+
+  pointLayer = L.layerGroup().addTo(map)
+
+  L.circleMarker([latitude, longitude], {
+    radius: 14,
+    color: '#ffd54f',
+    weight: 2,
+    fillColor: '#ffd54f',
+    fillOpacity: 0.08,
+    opacity: 0.9,
+  }).addTo(pointLayer)
+
+  const marker = L.circleMarker([latitude, longitude], {
+    radius: 6,
+    color: '#ffd54f',
+    weight: 3,
+    fillColor: '#07131f',
+    fillOpacity: 1,
+  })
+
+  marker.bindTooltip(point.point_id, {
+    permanent: true,
+    direction: 'top',
+    offset: [0, -9],
+    className: 'selected-point-label',
+  })
+
+  marker.addTo(pointLayer)
+}
 
 // =====================================
 // DIBUJAR UNA SOLA AEROVÍA
 // =====================================
 
-const drawRoute =
-  (
-    routeName,
-    points
-  ) => {
+const drawRoute = (routeName, points) => {
+  if (!map) {
+    return
+  }
 
-    if (!map) {
+  clearRouteLayer()
 
+  routeLayer = L.layerGroup().addTo(map)
+
+  const coordinates = []
+
+  points.forEach((point, index) => {
+    const latitude = Number(point.latitude ?? point.position?.latitude)
+
+    const longitude = Number(point.longitude ?? point.position?.longitude)
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return
-
     }
 
+    coordinates.push([latitude, longitude])
 
-    clearRouteLayer()
+    // =============================
+    // PUNTO
+    // =============================
 
+    const marker = L.circleMarker([latitude, longitude], {
+      radius: 5,
+      color: '#00e5ff',
+      weight: 2,
+      fillColor: '#06131d',
+      fillOpacity: 1,
+      opacity: 1,
+    })
 
-    routeLayer =
-      L.layerGroup()
-        .addTo(map)
+    // =============================
+    // NOMBRE
+    // =============================
 
+    marker.bindTooltip(point.point_id, {
+      permanent: true,
+      direction: 'top',
+      offset: [0, -7],
+      className: 'point-label',
+    })
 
-    const coordinates = []
+    // =============================
+    // INFORMACIÓN
+    // =============================
 
-
-    points.forEach(
-      (point, index) => {
-
-        const latitude =
-          Number(
-            point.latitude ??
-            point.position?.latitude
-          )
-
-
-        const longitude =
-          Number(
-            point.longitude ??
-            point.position?.longitude
-          )
-
-
-        if (
-          !Number.isFinite(latitude) ||
-          !Number.isFinite(longitude)
-        ) {
-
-          return
-
-        }
-
-
-        coordinates.push([
-          latitude,
-          longitude
-        ])
-
-
-        // =============================
-        // PUNTO
-        // =============================
-
-        const marker =
-          L.circleMarker(
-            [
-              latitude,
-              longitude
-            ],
-            {
-              radius: 5,
-              color: '#00e5ff',
-              weight: 2,
-              fillColor: '#06131d',
-              fillOpacity: 1,
-              opacity: 1
-            }
-          )
-
-
-        // =============================
-        // NOMBRE
-        // =============================
-
-        marker.bindTooltip(
-          point.point_id,
-          {
-            permanent: true,
-            direction: 'top',
-            offset: [0, -7],
-            className:
-              'point-label'
-          }
-        )
-
-
-        // =============================
-        // INFORMACIÓN
-        // =============================
-
-        marker.bindPopup(`
+    marker.bindPopup(`
           <div class="atc-popup">
 
             <div class="popup-type">
@@ -2059,226 +1226,127 @@ const drawRoute =
           </div>
         `)
 
+    marker.addTo(routeLayer)
+  })
 
-        marker.addTo(
-          routeLayer
-        )
+  // =================================
+  // LÍNEA
+  // =================================
 
-      }
-    )
+  if (coordinates.length > 1) {
+    // RESPLANDOR
 
+    L.polyline(coordinates, {
+      color: '#00e5ff',
+      weight: 7,
+      opacity: 0.12,
+      interactive: false,
+    }).addTo(routeLayer)
+
+    // LÍNEA PRINCIPAL
+
+    const line = L.polyline(coordinates, {
+      color: '#00e5ff',
+      weight: 3,
+      opacity: 1,
+    })
+
+    line.bindTooltip(routeName, {
+      sticky: true,
+      className: 'route-tooltip',
+    })
+
+    line.addTo(routeLayer)
 
     // =================================
-    // LÍNEA
+    // NOMBRE DE AEROVÍA
     // =================================
 
-    if (
-      coordinates.length > 1
-    ) {
+    const middleIndex = Math.floor(coordinates.length / 2)
 
-      // RESPLANDOR
+    const middle = coordinates[middleIndex]
 
-      L.polyline(
-        coordinates,
-        {
-          color: '#00e5ff',
-          weight: 7,
-          opacity: 0.12,
-          interactive: false
-        }
-      )
-        .addTo(
-          routeLayer
-        )
+    L.marker(middle, {
+      interactive: false,
 
+      icon: L.divIcon({
+        className: 'airway-label',
 
-      // LÍNEA PRINCIPAL
+        html: `<span>${routeName}</span>`,
 
-      const line =
-        L.polyline(
-          coordinates,
-          {
-            color: '#00e5ff',
-            weight: 3,
-            opacity: 1
-          }
-        )
+        iconSize: null,
+      }),
+    }).addTo(routeLayer)
 
+    // =================================
+    // ZOOM
+    // =================================
 
-      line.bindTooltip(
-        routeName,
-        {
-          sticky: true,
-          className:
-            'route-tooltip'
-        }
-      )
+    map.fitBounds(line.getBounds(), {
+      padding: [70, 70],
 
-
-      line.addTo(
-        routeLayer
-      )
-
-
-      // =================================
-      // NOMBRE DE AEROVÍA
-      // =================================
-
-      const middleIndex =
-        Math.floor(
-          coordinates.length / 2
-        )
-
-
-      const middle =
-        coordinates[
-          middleIndex
-        ]
-
-
-      L.marker(
-        middle,
-        {
-          interactive: false,
-
-          icon:
-            L.divIcon({
-              className:
-                'airway-label',
-
-              html:
-                `<span>${routeName}</span>`,
-
-              iconSize: null
-            })
-        }
-      )
-        .addTo(
-          routeLayer
-        )
-
-
-      // =================================
-      // ZOOM
-      // =================================
-
-      map.fitBounds(
-        line.getBounds(),
-        {
-          padding:
-            [70, 70],
-
-          maxZoom: 9
-        }
-      )
-
-    }
-
-    else if (
-      coordinates.length === 1
-    ) {
-
-      map.setView(
-        coordinates[0],
-        8
-      )
-
-    }
-
-    else {
-
-      routeError.value =
-        `${routeName} no tiene puntos con coordenadas.`
-
-    }
-
+      maxZoom: 9,
+    })
+  } else if (coordinates.length === 1) {
+    map.setView(coordinates[0], 8)
+  } else {
+    routeError.value = `${routeName} no tiene puntos con coordenadas.`
   }
-
+}
 
 // =====================================
 // FORMATEAR COORDENADA
 // =====================================
 
-const formatCoordinate =
-  (value) => {
+const formatCoordinate = (value) => {
+  const number = Number(value)
 
-    const number =
-      Number(value)
-
-    if (
-      !Number.isFinite(number)
-    ) {
-
-      return 'N/D'
-
-    }
-
-    return number.toFixed(8)
-
+  if (!Number.isFinite(number)) {
+    return 'N/D'
   }
 
+  return number.toFixed(8)
+}
 
 // =====================================
 // REINICIAR MAPA
 // =====================================
 
-const resetMap =
-  () => {
-
-    if (!map) {
-
-      return
-
-    }
-
-    map.setView(
-      [
-        23.6345,
-        -102.5528
-      ],
-      5
-    )
-
+const resetMap = () => {
+  if (!map) {
+    return
   }
 
+  map.setView([23.6345, -102.5528], 5)
+}
 
 // =====================================
 // LIMPIAR MAPA
 // =====================================
 
-const clearMap =
-  () => {
+const clearMap = () => {
+  clearRouteLayer()
 
-    clearRouteLayer()
+  clearPointLayer()
 
-    clearPointLayer()
+  selectedRoute.value = ''
 
-    selectedRoute.value = ''
+  selectedRoutePoints.value = 0
 
-    selectedRoutePoints.value = 0
+  routeError.value = ''
 
-    routeError.value = ''
+  if (searchMode.value === 'point') {
+    selectedPoint.value = null
 
+    pointRoutes.value = []
 
-    if (
-      searchMode.value ===
-      'point'
-    ) {
+    search.value = ''
 
-      selectedPoint.value = null
-
-      pointRoutes.value = []
-
-      search.value = ''
-
-      pointError.value = ''
-
-    }
-
-
-    resetMap()
-
+    pointError.value = ''
   }
+
+  resetMap()
+}
 
 // =====================================
 // ABRIR MODIFICACIÓN DE FIJO
@@ -2292,39 +1360,29 @@ const openEditPoint = () => {
   const point = selectedPoint.value
 
   editPoint.value = {
-    original_point_id:
-      point.point_id || '',
+    original_point_id: point.point_id || '',
 
-    point_id:
-      point.point_id || '',
+    point_id: point.point_id || '',
 
-    raw:
-      point.position?.raw || '',
+    raw: point.position?.raw || '',
 
-    latitude:
-      point.position?.latitude ?? '',
+    latitude: point.position?.latitude ?? '',
 
-    longitude:
-      point.position?.longitude ?? '',
+    longitude: point.position?.longitude ?? '',
 
-    point_type:
-      point.point_type || '',
+    point_type: point.point_type || '',
 
-    relevant_fix:
-      Boolean(point.relevant_fix),
+    relevant_fix: Boolean(point.relevant_fix),
 
-    airport_id:
-      point.airport_id || '',
+    airport_id: point.airport_id || '',
 
-    comment:
-      point.comment || ''
+    comment: point.comment || '',
   }
 
   editPointError.value = ''
   editPointSuccess.value = ''
   editPointVisible.value = true
 }
-
 
 // =====================================
 // CERRAR MODIFICACIÓN
@@ -2340,53 +1398,33 @@ const closeEditPoint = () => {
   editPointSuccess.value = ''
 }
 
-
 // =====================================
 // GUARDAR MODIFICACIÓN
 // =====================================
 
 const saveEditPoint = async () => {
-  const originalId =
-    editPoint.value.original_point_id
-      .trim()
-      .toUpperCase()
+  const originalId = editPoint.value.original_point_id.trim().toUpperCase()
 
-  const newId =
-    editPoint.value.point_id
-      .trim()
-      .toUpperCase()
+  const newId = editPoint.value.point_id.trim().toUpperCase()
 
-  const latitude =
-    Number(editPoint.value.latitude)
+  const latitude = Number(editPoint.value.latitude)
 
-  const longitude =
-    Number(editPoint.value.longitude)
+  const longitude = Number(editPoint.value.longitude)
 
   if (!originalId || !newId) {
-    editPointError.value =
-      'El identificador del fijo es obligatorio.'
+    editPointError.value = 'El identificador del fijo es obligatorio.'
 
     return
   }
 
-  if (
-    !Number.isFinite(latitude) ||
-    latitude < -90 ||
-    latitude > 90
-  ) {
-    editPointError.value =
-      'La latitud no es válida.'
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    editPointError.value = 'La latitud no es válida.'
 
     return
   }
 
-  if (
-    !Number.isFinite(longitude) ||
-    longitude < -180 ||
-    longitude > 180
-  ) {
-    editPointError.value =
-      'La longitud no es válida.'
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    editPointError.value = 'La longitud no es válida.'
 
     return
   }
@@ -2396,61 +1434,40 @@ const saveEditPoint = async () => {
     editPointError.value = ''
     editPointSuccess.value = ''
 
-    const response = await fetch(
-      `${API}/characteristic-points/${encodeURIComponent(originalId)}`,
-      {
-        method: 'PUT',
+    const response = await fetch(`${API}/characteristic-points/${encodeURIComponent(originalId)}`, {
+      method: 'PUT',
 
-        headers: {
-          'Content-Type': 'application/json'
+      headers: {
+        'Content-Type': 'application/json',
+      },
+
+      body: JSON.stringify({
+        point_id: newId,
+
+        position: {
+          raw: editPoint.value.raw.trim().toUpperCase(),
+
+          latitude,
+          longitude,
         },
 
-        body: JSON.stringify({
-          point_id: newId,
+        point_type: editPoint.value.point_type.trim().toUpperCase(),
 
-          position: {
-            raw:
-              editPoint.value.raw
-                .trim()
-                .toUpperCase(),
+        relevant_fix: editPoint.value.relevant_fix,
 
-            latitude,
-            longitude
-          },
+        airport_id: editPoint.value.airport_id.trim() || null,
 
-          point_type:
-            editPoint.value.point_type
-              .trim()
-              .toUpperCase(),
+        comment: editPoint.value.comment.trim() || null,
+      }),
+    })
 
-          relevant_fix:
-            editPoint.value.relevant_fix,
-
-          airport_id:
-            editPoint.value.airport_id
-              .trim() || null,
-
-          comment:
-            editPoint.value.comment
-              .trim() || null
-        })
-      }
-    )
-
-    const data =
-      await response
-        .json()
-        .catch(() => ({}))
+    const data = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(
-        data.error ||
-        'No se pudo modificar el fijo.'
-      )
+      throw new Error(data.error || 'No se pudo modificar el fijo.')
     }
 
-    editPointSuccess.value =
-      'Fijo actualizado correctamente.'
+    editPointSuccess.value = 'Fijo actualizado correctamente.'
 
     // Por si cambiaste el nombre del fijo
     search.value = newId
@@ -2462,16 +1479,10 @@ const saveEditPoint = async () => {
       editPointVisible.value = false
       editPointSuccess.value = ''
     }, 700)
-
   } catch (error) {
-    console.error(
-      'Error modificando fijo:',
-      error
-    )
+    console.error('Error modificando fijo:', error)
 
-    editPointError.value =
-      error.message
-
+    editPointError.value = error.message
   } finally {
     editPointSaving.value = false
   }
@@ -2480,43 +1491,26 @@ const saveEditPoint = async () => {
 // INICIAR
 // =====================================
 
-onMounted(
-  async () => {
+onMounted(async () => {
+  await createMap()
 
-    await createMap()
-
-    await Promise.all([
-      loadRoutes(),
-      loadGroups()
-    ])
-
-  }
-)
-
+  await Promise.all([loadRoutes(), loadGroups()])
+})
 
 // =====================================
 // DESTRUIR
 // =====================================
 
-onUnmounted(
-  () => {
+onUnmounted(() => {
+  if (map) {
+    map.remove()
 
-    if (map) {
-
-      map.remove()
-
-      map = null
-
-    }
-
+    map = null
   }
-)
-
+})
 </script>
 
-
 <style scoped>
-
 /* =====================================
    SISTEMA
 ===================================== */
@@ -2524,7 +1518,6 @@ onUnmounted(
 .map-system {
   width: 100%;
 }
-
 
 /* =====================================
    MODOS DE BÚSQUEDA
@@ -2542,8 +1535,7 @@ onUnmounted(
 
   background: #07131f;
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
   border-radius: 7px;
 
@@ -2562,25 +1554,18 @@ onUnmounted(
 .mode-button:hover {
   color: white;
 
-  border-color:
-    #00a8c0;
+  border-color: #00a8c0;
 }
 
 .mode-button.active {
-  background:
-    #103342;
+  background: #103342;
 
-  border-color:
-    #00e5ff;
+  border-color: #00e5ff;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  box-shadow:
-    0 0 12px
-    rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.1);
 }
-
 
 /* =====================================
    TOOLBAR
@@ -2589,8 +1574,7 @@ onUnmounted(
 .map-toolbar {
   display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
   align-items: center;
 
@@ -2598,7 +1582,6 @@ onUnmounted(
 
   margin-bottom: 15px;
 }
-
 
 /* =====================================
    BUSCADOR
@@ -2611,36 +1594,27 @@ onUnmounted(
   display: flex;
   align-items: center;
 
-  box-sizing:
-    border-box;
+  box-sizing: border-box;
 
-  padding:
-    0 8px 0 14px;
+  padding: 0 8px 0 14px;
 
-  background:
-    #07131f;
+  background: #07131f;
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  border-radius:
-    8px;
+  border-radius: 8px;
 }
 
 .search-box:focus-within {
-  border-color:
-    #00e5ff;
+  border-color: #00e5ff;
 
-  box-shadow:
-    0 0 0 2px
-    rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08);
 }
 
 .search-icon {
   margin-right: 10px;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
   font-size: 20px;
 }
@@ -2654,36 +1628,29 @@ onUnmounted(
 
   outline: none;
 
-  background:
-    transparent;
+  background: transparent;
 
   color: white;
 
-  font-family:
-    inherit;
+  font-family: inherit;
 
   font-size: 14px;
 
-  text-transform:
-    uppercase;
+  text-transform: uppercase;
 }
 
 .search-box input::placeholder {
-  color:
-    #60758b;
+  color: #60758b;
 
-  text-transform:
-    none;
+  text-transform: none;
 }
 
 .clear-search {
   border: none;
 
-  background:
-    transparent;
+  background: transparent;
 
-  color:
-    #71869b;
+  color: #71869b;
 
   cursor: pointer;
 
@@ -2693,17 +1660,13 @@ onUnmounted(
 .search-button {
   margin-left: 7px;
 
-  padding:
-    8px 13px;
+  padding: 8px 13px;
 
-  background:
-    #0c6873;
+  background: #0c6873;
 
-  border:
-    1px solid #00a8c0;
+  border: 1px solid #00a8c0;
 
-  border-radius:
-    5px;
+  border-radius: 5px;
 
   color: white;
 
@@ -2714,17 +1677,14 @@ onUnmounted(
 }
 
 .search-button:hover {
-  background:
-    #0b8490;
+  background: #0b8490;
 }
 
 .search-button:disabled {
   opacity: 0.45;
 
-  cursor:
-    not-allowed;
+  cursor: not-allowed;
 }
-
 
 /* =====================================
    CONTADOR
@@ -2737,40 +1697,33 @@ onUnmounted(
 
   gap: 6px;
 
-  color:
-    #71869b;
+  color: #71869b;
 
   font-size: 11px;
 }
 
 .route-counter strong {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
   font-size: 16px;
 }
-
 
 /* =====================================
    GRUPOS
 ===================================== */
 
 .groups-section {
-  margin-bottom:
-    15px;
+  margin-bottom: 15px;
 }
 
 .groups-title {
-  margin-bottom:
-    8px;
+  margin-bottom: 8px;
 
-  color:
-    #71869b;
+  color: #71869b;
 
   font-size: 10px;
 
-  letter-spacing:
-    1.2px;
+  letter-spacing: 1.2px;
 }
 
 .groups {
@@ -2782,14 +1735,11 @@ onUnmounted(
 
   padding: 11px;
 
-  background:
-    #07131f;
+  background: #07131f;
 
-  border:
-    1px solid #17283a;
+  border: 1px solid #17283a;
 
-  border-radius:
-    8px;
+  border-radius: 8px;
 }
 
 .group-button {
@@ -2797,91 +1747,68 @@ onUnmounted(
 
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
-  align-items:
-    center;
+  align-items: center;
 
   gap: 3px;
 
-  padding:
-    7px 12px;
+  padding: 7px 12px;
 
-  background:
-    #0b1b29;
+  background: #0b1b29;
 
-  border:
-    1px solid #172f42;
+  border: 1px solid #172f42;
 
-  border-radius:
-    6px;
+  border-radius: 6px;
 
-  color:
-    #91a4b8;
+  color: #91a4b8;
 
-  cursor:
-    pointer;
+  cursor: pointer;
 
-  transition:
-    0.2s;
+  transition: 0.2s;
 }
 
 .group-button:hover {
-  border-color:
-    #00e5ff;
+  border-color: #00e5ff;
 
   color: white;
 }
 
 .group-button.active {
-  background:
-    #103342;
+  background: #103342;
 
-  border-color:
-    #00e5ff;
+  border-color: #00e5ff;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 }
 
 .group-button strong {
-  font-size:
-    14px;
+  font-size: 14px;
 }
 
 .group-button span {
   min-width: 22px;
 
-  padding:
-    2px 5px;
+  padding: 2px 5px;
 
-  background:
-    #050e16;
+  background: #050e16;
 
-  border-radius:
-    4px;
+  border-radius: 4px;
 
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    9px;
+  font-size: 9px;
 
-  text-align:
-    center;
+  text-align: center;
 }
 
 .no-groups {
   padding: 10px;
 
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    10px;
+  font-size: 10px;
 }
-
 
 /* =====================================
    INFORMACIÓN DEL FIJO
@@ -2890,34 +1817,27 @@ onUnmounted(
 .point-information {
   display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
   align-items: center;
 
   gap: 25px;
 
-  margin-bottom:
-    15px;
+  margin-bottom: 15px;
 
-  padding:
-    14px 18px;
+  padding: 14px 18px;
 
-  background:
-    #07131f;
+  background: #07131f;
 
-  border:
-    1px solid #3c3a27;
+  border: 1px solid #3c3a27;
 
-  border-radius:
-    8px;
+  border-radius: 8px;
 }
 
 .point-information-main {
   display: flex;
 
-  align-items:
-    center;
+  align-items: center;
 
   gap: 12px;
 }
@@ -2928,53 +1848,41 @@ onUnmounted(
 
   display: flex;
 
-  align-items:
-    center;
+  align-items: center;
 
-  justify-content:
-    center;
+  justify-content: center;
 
-  border:
-    2px solid #ffd54f;
+  border: 2px solid #ffd54f;
 
-  border-radius:
-    50%;
+  border-radius: 50%;
 
-  color:
-    #ffd54f;
+  color: #ffd54f;
 
-  font-size:
-    22px;
+  font-size: 22px;
 }
 
 .point-information-main > div:last-child {
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 }
 
 .point-caption {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    9px;
+  font-size: 9px;
 }
 
 .point-title {
-  color:
-    #ffd54f;
+  color: #ffd54f;
 
-  font-size:
-    20px;
+  font-size: 20px;
 }
 
 .point-data {
   display: flex;
 
-  align-items:
-    center;
+  align-items: center;
 
   gap: 28px;
 }
@@ -2982,59 +1890,44 @@ onUnmounted(
 .point-data > div {
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
   gap: 3px;
 }
 
 .point-data span {
-  color:
-    #60758b;
+  color: #60758b;
 
-  font-size:
-    8px;
+  font-size: 8px;
 }
 
 .point-data strong {
-  color:
-    #dce7f1;
+  color: #dce7f1;
 
-  font-size:
-    11px;
+  font-size: 11px;
 }
 
 .point-data .cyan {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    15px;
+  font-size: 15px;
 }
 
 .point-search-error {
-  margin-bottom:
-    15px;
+  margin-bottom: 15px;
 
-  padding:
-    10px 14px;
+  padding: 10px 14px;
 
-  background:
-    #29151b;
+  background: #29151b;
 
-  border:
-    1px solid #713442;
+  border: 1px solid #713442;
 
-  border-radius:
-    6px;
+  border-radius: 6px;
 
-  color:
-    #ff8795;
+  color: #ff8795;
 
-  font-size:
-    11px;
+  font-size: 11px;
 }
-
 
 /* =====================================
    MAPA + PANEL
@@ -3049,17 +1942,13 @@ onUnmounted(
     minmax(0, 1fr)
     270px;
 
-  background:
-    #03080d;
+  background: #03080d;
 
-  border:
-    1px solid #17283a;
+  border: 1px solid #17283a;
 
-  border-radius:
-    10px;
+  border-radius: 10px;
 
-  overflow:
-    hidden;
+  overflow: hidden;
 }
 
 .map-container {
@@ -3067,116 +1956,89 @@ onUnmounted(
 
   min-width: 0;
 
-  background:
-    #03080d;
+  background: #03080d;
 }
 
 .map {
   width: 100%;
   height: 100%;
 
-  background:
-    #0b1824;
+  background: #0b1824;
 }
-
 
 /* =====================================
    MAPA OSCURO
 ===================================== */
 
 .map :deep(.leaflet-tile-pane) {
-  filter:
-    invert(100%)
-    hue-rotate(180deg)
-    brightness(85%)
-    contrast(90%)
-    saturate(65%);
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%) saturate(65%);
 }
 
 .map :deep(.leaflet-tile) {
   filter: none;
 }
 
-
 /* =====================================
    CONTROLES LEAFLET
 ===================================== */
 
 .map :deep(.leaflet-control-zoom a) {
-  background:
-    #07131f;
+  background: #07131f;
 
-  border-color:
-    #1c3a4d;
+  border-color: #1c3a4d;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 }
 
 .map :deep(.leaflet-control-zoom a:hover) {
-  background:
-    #102a3a;
+  background: #102a3a;
 
   color: white;
 }
 
 .map :deep(.leaflet-control-attribution) {
-  background:
-    rgba(3, 8, 13, 0.75);
+  background: rgba(3, 8, 13, 0.75);
 
-  color:
-    #60758b;
+  color: #60758b;
 }
 
 .map :deep(.leaflet-control-attribution a) {
-  color:
-    #00a8c0;
+  color: #00a8c0;
 }
-
 
 /* =====================================
    CARGANDO
 ===================================== */
 
 .loading {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
   top: 15px;
   left: 50%;
 
-  transform:
-    translateX(-50%);
+  transform: translateX(-50%);
 
-  padding:
-    9px 14px;
+  padding: 9px 14px;
 
-  background:
-    rgba(7, 19, 31, 0.96);
+  background: rgba(7, 19, 31, 0.96);
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  border-radius:
-    6px;
+  border-radius: 6px;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    10px;
+  font-size: 10px;
 }
-
 
 /* =====================================
    TARJETA RUTA
 ===================================== */
 
 .selected-route-card {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
@@ -3187,56 +2049,43 @@ onUnmounted(
 
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
-  padding:
-    10px 13px;
+  padding: 10px 13px;
 
-  background:
-    rgba(5, 15, 24, 0.95);
+  background: rgba(5, 15, 24, 0.95);
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  border-radius:
-    7px;
+  border-radius: 7px;
 }
 
 .selected-route-card span,
 .selected-point-card span {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    8px;
+  font-size: 8px;
 }
 
 .selected-route-card strong {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    19px;
+  font-size: 19px;
 }
 
 .selected-route-card small,
 .selected-point-card small {
-  color:
-    #91a4b8;
+  color: #91a4b8;
 
-  font-size:
-    9px;
+  font-size: 9px;
 }
-
 
 /* =====================================
    TARJETA FIJO
 ===================================== */
 
 .selected-point-card {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
@@ -3247,161 +2096,121 @@ onUnmounted(
 
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
-  padding:
-    10px 13px;
+  padding: 10px 13px;
 
-  background:
-    rgba(5, 15, 24, 0.95);
+  background: rgba(5, 15, 24, 0.95);
 
-  border:
-    1px solid #5b5428;
+  border: 1px solid #5b5428;
 
-  border-radius:
-    7px;
+  border-radius: 7px;
 }
 
 .selected-point-card strong {
-  color:
-    #ffd54f;
+  color: #ffd54f;
 
-  font-size:
-    17px;
+  font-size: 17px;
 }
-
 
 /* =====================================
    LIMPIAR
 ===================================== */
 
 .clear-map-button {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
   top: 15px;
   right: 15px;
 
-  padding:
-    8px 10px;
+  padding: 8px 10px;
 
-  background:
-    rgba(5, 15, 24, 0.95);
+  background: rgba(5, 15, 24, 0.95);
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  border-radius:
-    6px;
+  border-radius: 6px;
 
-  color:
-    #91a4b8;
+  color: #91a4b8;
 
-  font-size:
-    9px;
+  font-size: 9px;
 
-  cursor:
-    pointer;
+  cursor: pointer;
 }
 
 .clear-map-button:hover {
-  border-color:
-    #00e5ff;
+  border-color: #00e5ff;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 }
-
 
 /* =====================================
    ESTADO
 ===================================== */
 
 .map-status {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
   bottom: 15px;
   left: 15px;
 
-  padding:
-    10px 13px;
+  padding: 10px 13px;
 
-  background:
-    rgba(5, 15, 24, 0.95);
+  background: rgba(5, 15, 24, 0.95);
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  border-radius:
-    7px;
+  border-radius: 7px;
 }
 
 .map-status div {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    8px;
+  font-size: 8px;
 }
 
 .map-status strong {
-  margin-right:
-    5px;
+  margin-right: 5px;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 }
 
 .map-status span {
-  color:
-    #91a4b8;
+  color: #91a4b8;
 
-  font-size:
-    9px;
+  font-size: 9px;
 }
-
 
 /* =====================================
    ERROR
 ===================================== */
 
 .map-error {
-  position:
-    absolute;
+  position: absolute;
 
   z-index: 1000;
 
   bottom: 15px;
   left: 50%;
 
-  transform:
-    translateX(-50%);
+  transform: translateX(-50%);
 
-  padding:
-    9px 13px;
+  padding: 9px 13px;
 
-  background:
-    #29151b;
+  background: #29151b;
 
-  border:
-    1px solid #713442;
+  border: 1px solid #713442;
 
-  border-radius:
-    6px;
+  border-radius: 6px;
 
-  color:
-    #ff8795;
+  color: #ff8795;
 
-  font-size:
-    10px;
+  font-size: 10px;
 }
-
 
 /* =====================================
    PANEL DERECHO
@@ -3410,72 +2219,56 @@ onUnmounted(
 .route-panel {
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
   min-height: 0;
 
-  background:
-    #06111b;
+  background: #06111b;
 
-  border-left:
-    1px solid #17283a;
+  border-left: 1px solid #17283a;
 }
 
 .panel-header {
   display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
-  align-items:
-    center;
+  align-items: center;
 
   min-height: 55px;
 
-  box-sizing:
-    border-box;
+  box-sizing: border-box;
 
-  padding:
-    12px 14px;
+  padding: 12px 14px;
 
-  border-bottom:
-    1px solid #17283a;
+  border-bottom: 1px solid #17283a;
 }
 
 .panel-header div {
   display: flex;
 
-  align-items:
-    center;
+  align-items: center;
 
   gap: 8px;
 }
 
 .panel-header span {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    9px;
+  font-size: 9px;
 }
 
 .panel-header div strong {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    15px;
+  font-size: 15px;
 }
 
 .panel-count {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    13px;
+  font-size: 13px;
 }
-
 
 /* =====================================
    LISTA
@@ -3486,8 +2279,7 @@ onUnmounted(
 
   min-height: 0;
 
-  overflow-y:
-    auto;
+  overflow-y: auto;
 }
 
 .route-list::-webkit-scrollbar {
@@ -3495,16 +2287,13 @@ onUnmounted(
 }
 
 .route-list::-webkit-scrollbar-track {
-  background:
-    #050e16;
+  background: #050e16;
 }
 
 .route-list::-webkit-scrollbar-thumb {
-  background:
-    #1b3b4e;
+  background: #1b3b4e;
 
-  border-radius:
-    4px;
+  border-radius: 4px;
 }
 
 .route-item {
@@ -3512,88 +2301,66 @@ onUnmounted(
 
   display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
-  align-items:
-    center;
+  align-items: center;
 
-  padding:
-    12px 13px;
+  padding: 12px 13px;
 
-  background:
-    transparent;
+  background: transparent;
 
   border: none;
 
-  border-bottom:
-    1px solid #102231;
+  border-bottom: 1px solid #102231;
 
-  cursor:
-    pointer;
+  cursor: pointer;
 
-  text-align:
-    left;
+  text-align: left;
 }
 
 .route-item:hover {
-  background:
-    #0d2231;
+  background: #0d2231;
 }
 
 .route-item.selected {
-  background:
-    #103342;
+  background: #103342;
 
-  box-shadow:
-    inset 3px 0 0
-    #00e5ff;
+  box-shadow: inset 3px 0 0 #00e5ff;
 }
 
 .route-item div {
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
   gap: 3px;
 }
 
 .route-item strong {
-  color:
-    #5bd6dd;
+  color: #5bd6dd;
 
-  font-size:
-    13px;
+  font-size: 13px;
 }
 
 .route-item.selected strong {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 }
 
 .route-item span {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    9px;
+  font-size: 9px;
 }
 
 .group-badge {
-  padding:
-    3px 6px;
+  padding: 3px 6px;
 
-  background:
-    #102334;
+  background: #102334;
 
-  border-radius:
-    4px;
+  border-radius: 4px;
 
-  color:
-    #5bd6dd !important;
+  color: #5bd6dd !important;
 }
-
 
 /* =====================================
    MENSAJES
@@ -3602,38 +2369,29 @@ onUnmounted(
 .panel-message {
   display: flex;
 
-  flex-direction:
-    column;
+  flex-direction: column;
 
-  align-items:
-    center;
+  align-items: center;
 
   gap: 8px;
 
-  padding:
-    30px 15px;
+  padding: 30px 15px;
 
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    11px;
+  font-size: 11px;
 
-  text-align:
-    center;
+  text-align: center;
 }
 
 .panel-message small {
-  color:
-    #53677a;
+  color: #53677a;
 }
 
 .arrow-up {
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    20px;
+  font-size: 20px;
 }
 
 .point-search-symbol {
@@ -3642,52 +2400,38 @@ onUnmounted(
 
   display: flex;
 
-  align-items:
-    center;
+  align-items: center;
 
-  justify-content:
-    center;
+  justify-content: center;
 
-  border:
-    1px solid #ffd54f;
+  border: 1px solid #ffd54f;
 
-  border-radius:
-    50%;
+  border-radius: 50%;
 
-  color:
-    #ffd54f;
+  color: #ffd54f;
 
-  font-size:
-    20px;
+  font-size: 20px;
 }
 
 .panel-error {
-  padding:
-    20px 15px;
+  padding: 20px 15px;
 
-  color:
-    #ff8795;
+  color: #ff8795;
 
-  font-size:
-    10px;
+  font-size: 10px;
 
-  text-align:
-    center;
+  text-align: center;
 }
-
 
 /* =====================================
    RESPONSIVE
 ===================================== */
 
 @media (max-width: 900px) {
-
   .map-toolbar {
-    align-items:
-      stretch;
+    align-items: stretch;
 
-    flex-direction:
-      column;
+    flex-direction: column;
   }
 
   .search-box {
@@ -3695,23 +2439,19 @@ onUnmounted(
   }
 
   .point-information {
-    align-items:
-      flex-start;
+    align-items: flex-start;
 
-    flex-direction:
-      column;
+    flex-direction: column;
   }
 
   .point-data {
-    flex-wrap:
-      wrap;
+    flex-wrap: wrap;
   }
 
   .map-layout {
     height: auto;
 
-    grid-template-columns:
-      1fr;
+    grid-template-columns: 1fr;
   }
 
   .map-container {
@@ -3721,319 +2461,200 @@ onUnmounted(
   .route-panel {
     height: 300px;
 
-    border-left:
-      none;
+    border-left: none;
 
-    border-top:
-      1px solid #17283a;
+    border-top: 1px solid #17283a;
   }
-
 }
-
 </style>
-
 
 <!-- ===================================
      ESTILOS LEAFLET GLOBALES
 =================================== -->
 
 <style>
-
 /* =====================================
    NOMBRE PUNTO NORMAL
 ===================================== */
 
 .point-label {
-  background:
-    rgba(
-      5,
-      15,
-      24,
-      0.96
-    ) !important;
+  background: rgba(5, 15, 24, 0.96) !important;
 
-  border:
-    1px solid
-    rgba(
-      0,
-      229,
-      255,
-      0.65
-    ) !important;
+  border: 1px solid rgba(0, 229, 255, 0.65) !important;
 
-  border-radius:
-    3px !important;
+  border-radius: 3px !important;
 
-  padding:
-    2px 5px !important;
+  padding: 2px 5px !important;
 
-  color:
-    #00e5ff !important;
+  color: #00e5ff !important;
 
-  font-family:
-    inherit !important;
+  font-family: inherit !important;
 
-  font-size:
-    9px !important;
+  font-size: 9px !important;
 
-  font-weight:
-    bold !important;
+  font-weight: bold !important;
 
-  box-shadow:
-    0 0 7px
-    rgba(
-      0,
-      229,
-      255,
-      0.12
-    ) !important;
+  box-shadow: 0 0 7px rgba(0, 229, 255, 0.12) !important;
 }
 
 .point-label::before {
-  display:
-    none !important;
+  display: none !important;
 }
-
 
 /* =====================================
    FIJO BUSCADO
 ===================================== */
 
 .selected-point-label {
-  background:
-    rgba(
-      20,
-      18,
-      5,
-      0.96
-    ) !important;
+  background: rgba(20, 18, 5, 0.96) !important;
 
-  border:
-    1px solid
-    #ffd54f !important;
+  border: 1px solid #ffd54f !important;
 
-  border-radius:
-    4px !important;
+  border-radius: 4px !important;
 
-  padding:
-    3px 7px !important;
+  padding: 3px 7px !important;
 
-  color:
-    #ffd54f !important;
+  color: #ffd54f !important;
 
-  font-family:
-    inherit !important;
+  font-family: inherit !important;
 
-  font-size:
-    11px !important;
+  font-size: 11px !important;
 
-  font-weight:
-    700 !important;
+  font-weight: 700 !important;
 
-  box-shadow:
-    0 0 12px
-    rgba(
-      255,
-      213,
-      79,
-      0.25
-    ) !important;
+  box-shadow: 0 0 12px rgba(255, 213, 79, 0.25) !important;
 }
 
 .selected-point-label::before {
-  display:
-    none !important;
+  display: none !important;
 }
-
 
 /* =====================================
    NOMBRE AEROVÍA
 ===================================== */
 
 .airway-label {
-  background:
-    transparent !important;
+  background: transparent !important;
 
-  border:
-    none !important;
+  border: none !important;
 }
 
 .airway-label span {
-  display:
-    inline-block;
+  display: inline-block;
 
-  padding:
-    4px 8px;
+  padding: 4px 8px;
 
-  background:
-    #00e5ff;
+  background: #00e5ff;
 
-  border:
-    1px solid #67f3ff;
+  border: 1px solid #67f3ff;
 
-  border-radius:
-    4px;
+  border-radius: 4px;
 
-  color:
-    #031018;
+  color: #031018;
 
-  font-family:
-    inherit;
+  font-family: inherit;
 
-  font-size:
-    11px;
+  font-size: 11px;
 
-  font-weight:
-    bold;
+  font-weight: bold;
 
-  white-space:
-    nowrap;
+  white-space: nowrap;
 
-  box-shadow:
-    0 0 12px
-    rgba(
-      0,
-      229,
-      255,
-      0.35
-    );
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
 }
-
 
 /* =====================================
    TOOLTIP AEROVÍA
 ===================================== */
 
 .route-tooltip {
-  background:
-    #051018 !important;
+  background: #051018 !important;
 
-  border:
-    1px solid
-    #00e5ff !important;
+  border: 1px solid #00e5ff !important;
 
-  color:
-    #00e5ff !important;
+  color: #00e5ff !important;
 
-  font-family:
-    inherit !important;
+  font-family: inherit !important;
 
-  font-weight:
-    bold !important;
+  font-weight: bold !important;
 
-  box-shadow:
-    0 0 10px
-    rgba(
-      0,
-      229,
-      255,
-      0.15
-    ) !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15) !important;
 }
 
 .route-tooltip::before {
-  border-top-color:
-    #00e5ff !important;
+  border-top-color: #00e5ff !important;
 }
-
 
 /* =====================================
    POPUP
 ===================================== */
 
 .leaflet-popup-content-wrapper {
-  background:
-    #06111b;
+  background: #06111b;
 
-  color:
-    #dce7f1;
+  color: #dce7f1;
 
-  border:
-    1px solid #1c3a4d;
+  border: 1px solid #1c3a4d;
 
-  box-shadow:
-    0 5px 25px
-    rgba(
-      0,
-      0,
-      0,
-      0.6
-    );
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
 }
 
 .leaflet-popup-tip {
-  background:
-    #06111b;
+  background: #06111b;
 }
 
 .leaflet-popup-close-button {
-  color:
-    #71869b !important;
+  color: #71869b !important;
 }
 
 .leaflet-popup-close-button:hover {
-  color:
-    #00e5ff !important;
+  color: #00e5ff !important;
 }
 
 .atc-popup {
-  min-width:
-    190px;
+  min-width: 190px;
 }
 
 .popup-type {
-  color:
-    #71869b;
+  color: #71869b;
 
-  font-size:
-    8px;
+  font-size: 8px;
 }
 
 .popup-name {
-  margin:
-    3px 0 10px;
+  margin: 3px 0 10px;
 
-  color:
-    #00e5ff;
+  color: #00e5ff;
 
-  font-size:
-    18px;
+  font-size: 18px;
 
-  font-weight:
-    bold;
+  font-weight: bold;
 }
 
 .point-popup-name {
-  color:
-    #ffd54f;
+  color: #ffd54f;
 }
 
 .popup-row {
   display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
   gap: 15px;
 
-  padding:
-    5px 0;
+  padding: 5px 0;
 
-  border-top:
-    1px solid #17283a;
+  border-top: 1px solid #17283a;
 
-  font-size:
-    10px;
+  font-size: 10px;
 }
 
 .popup-row span {
-  color:
-    #71869b;
+  color: #71869b;
 }
 
 .popup-row strong {
-  color:
-    #dce7f1;
+  color: #dce7f1;
 }
 
 /* =====================================
@@ -4062,7 +2683,6 @@ onUnmounted(
   color: #ffffff;
 }
 
-
 /* =====================================
    FONDO DEL MODAL
 ===================================== */
@@ -4084,7 +2704,6 @@ onUnmounted(
   backdrop-filter: blur(4px);
 }
 
-
 /* =====================================
    VENTANA
 ===================================== */
@@ -4102,11 +2721,8 @@ onUnmounted(
   border: 1px solid #1d5365;
   border-radius: 12px;
 
-  box-shadow:
-    0 25px 80px
-    rgba(0, 0, 0, 0.55);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.55);
 }
-
 
 /* =====================================
    ENCABEZADO
@@ -4153,7 +2769,6 @@ onUnmounted(
   color: #ffffff;
 }
 
-
 /* =====================================
    FORMULARIO
 ===================================== */
@@ -4161,8 +2776,7 @@ onUnmounted(
 .edit-point-grid {
   display: grid;
 
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 
   gap: 18px;
 }
@@ -4212,9 +2826,7 @@ onUnmounted(
 .edit-point-grid textarea:focus {
   border-color: #00e5ff;
 
-  box-shadow:
-    0 0 0 2px
-    rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08);
 }
 
 .full-field {
@@ -4233,7 +2845,6 @@ onUnmounted(
   width: 18px;
   height: 18px;
 }
-
 
 /* =====================================
    AEROVÍAS AFECTADAS
@@ -4287,7 +2898,6 @@ onUnmounted(
   font-weight: 700;
 }
 
-
 /* =====================================
    MENSAJES
 ===================================== */
@@ -4318,7 +2928,6 @@ onUnmounted(
 
   color: #72e6a5;
 }
-
 
 /* =====================================
    BOTONES
@@ -4375,5 +2984,4 @@ onUnmounted(
 
   cursor: not-allowed;
 }
-
 </style>

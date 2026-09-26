@@ -1,0 +1,237 @@
+/* ==========================================
+   TIPOGRAFÍA GLOBAL ATCFPL
+========================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap');
+
+
+/* TEXTO GENERAL */
+
+html,
+body,
+#app {
+  font-family: 'Inter', sans-serif;
+}
+
+
+/* FORMULARIOS */
+
+button,
+input,
+select,
+textarea {
+  font-family: 'Inter', sans-serif;
+}
+
+
+/* ==========================================
+   TÍTULOS
+========================================== */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Rajdhani', sans-serif !important;
+
+  font-weight: 600;
+
+  letter-spacing: 0.5px;
+}
+
+
+/* ==========================================
+   MENÚ Y BOTONES
+========================================== */
+
+.menu-item,
+.menu-text,
+.hamburger,
+.new-flight,
+.view-all {
+  font-family: 'Rajdhani', sans-serif !important;
+
+  font-weight: 600;
+
+  letter-spacing: 0.4px;
+}
+
+
+/* ==========================================
+   MARCA ATCFPL
+========================================== */
+
+.brand-text h1 {
+  font-family: 'Rajdhani', sans-serif !important;
+
+  font-weight: 700;
+
+  letter-spacing: 1.5px;
+}
+
+
+/* ==========================================
+   DATOS TÉCNICOS
+========================================== */
+
+.utc strong,
+.callsign,
+.route-name,
+.flight-level,
+.coordinates,
+.airway-label,
+.point-label {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+
+/* ==========================================
+   TABLAS
+========================================== */
+
+table {
+  font-family: 'Inter', sans-serif;
+}
+
+th {
+  font-family: 'Rajdhani', sans-serif !important;
+
+  font-weight: 600;
+
+  letter-spacing: 0.5px;
+}
+
+td {
+  font-family: 'Inter', sans-serif;
+}
+
+
+/* ==========================================
+   FOOTER
+========================================== */
+
+.app-footer {
+  font-family: 'Inter', sans-serif !important;
+}
+/* ==========================================
+   TAMAÑO GLOBAL ATCFPL - GRANDE
+========================================== */
+
+html {
+  font-size: 20px;
+}
+
+body {
+  font-size: 1rem;
+}
+
+/* TEXTO GENERAL */
+
+p,
+span,
+a,
+label {
+  font-size: 0.95rem;
+}
+
+/* TÍTULOS */
+
+h1 {
+  font-size: 2rem !important;
+}
+
+h2 {
+  font-size: 1.5rem !important;
+}
+
+h3 {
+  font-size: 1.25rem !important;
+}
+
+/* SIDEBAR */
+
+.menu-item,
+.menu-text {
+  font-size: 1rem !important;
+}
+
+.brand-text h1 {
+  font-size: 1.5rem !important;
+}
+
+.brand-text > span {
+  font-size: 0.7rem !important;
+}
+
+/* HEADER */
+
+.header h2 {
+  font-size: 1.25rem !important;
+}
+
+.header span {
+  font-size: 0.75rem;
+}
+
+.utc strong {
+  font-size: 1.1rem !important;
+}
+
+/* BOTONES */
+
+button {
+  font-size: 0.9rem !important;
+}
+
+/* TABLAS */
+
+table {
+  font-size: 0.9rem;
+}
+
+th {
+  font-size: 0.8rem !important;
+}
+
+td {
+  font-size: 0.9rem !important;
+}
+
+/* DATOS TÉCNICOS */
+
+.callsign,
+.route-name,
+.flight-level,
+.coordinates,
+.airway-label,
+.point-label {
+  font-size: 0.95rem !important;
+}
+
+/* FOOTER */
+
+.app-footer {
+  font-size: 0.8rem !important;
+}
+
+.app-footer span,
+.app-footer strong {
+  font-size: 0.8rem !important;
+}
+html,
+body,
+#app {
+  margin: 0 !important;
+  padding: 0 !important;
+
+  width: 100%;
+  min-height: 100%;
+
+  background: #07111b;
+}
+
+body {
+  overflow-x: hidden;
+}

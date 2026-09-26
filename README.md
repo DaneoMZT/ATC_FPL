@@ -1,5 +1,12 @@
-# ATC_FPL
+# ATCFPL — Código Fuente
 
-Proyecto académico para el desarrollo de una plataforma web centralizada para la gestión y validación básica de planes de vuelo.
+ATCFPL es un proyecto académico orientado al desarrollo de una plataforma web para la gestión y consulta de información relacionada con planes de vuelo.
 
-Este repositorio contiene la documentación y avances correspondientes a los diferentes Sprints del proyecto ATCFPL.
+## Tecnologías
+
+- Vue.js y Vite — Frontend
+- Node.js y Express — Backend
+- MongoDB — Base de datos
+- JavaScript
+- HTTP / JSON
+

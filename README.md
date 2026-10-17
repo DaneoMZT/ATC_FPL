@@ -8,10 +8,17 @@ El proyecto se desarrolla de manera incremental mediante **Sprints**, incorporan
 
 - `sprint-1` — Documentación del primer Sprint.
 - `sprint-2` — Documentación y retrospectiva del segundo Sprint.
+- `sprint-3` — Desarrollo de módulos, administración de usuarios y consultas aeronáuticas.
+- `sprint-4` — Actualización de MongoDB Atlas, mejoras de conectividad y propuestas de integración del formulario FPL.
 - `atcfpl_code` — Código fuente del proyecto.
 
 ## 🛠️ Tecnologías
 
-**Vue.js · Vite · Node.js · Express · MongoDB**
+**Vue.js · Vite · Node.js · Express · MongoDB · MongoDB Atlas · Render**
+
+## 🌐 Plataforma web
+
+- **Frontend:** https://atcfpl-frontend.onrender.com
+- **Backend:** https://atc-fpl.onrender.com
 
 > ATCFPL es un prototipo académico en desarrollo y no está destinado para uso en sistemas ATC operativos.

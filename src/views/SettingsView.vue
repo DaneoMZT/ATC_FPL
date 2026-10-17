@@ -385,9 +385,12 @@ import { ref, onMounted } from 'vue'
 // API
 // =====================================
 
-const API_URL =
+const API_URL = (
   import.meta.env.VITE_API_URL ||
-  'http://localhost:3000'
+  (import.meta.env.DEV
+    ? 'http://localhost:3000/api'
+    : 'https://atc-fpl.onrender.com/api')
+).replace(/\/+$/, '').replace(/\/api$/, '')
 
 // =====================================
 // ESTADO GENERAL

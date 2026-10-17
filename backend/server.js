@@ -4,16 +4,436 @@ const { MongoClient, ObjectId } = require('mongodb')
 
 const cors = require('cors')
 
+const bcrypt = require('bcrypt')
+
+const jwt = require('jsonwebtoken')
 const app = express()
 
 app.use(cors())
 app.use(express.json())
 
+// ======================================================
+// AUTENTICACIÓN JWT
+// ======================================================
+
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      error: 'Token requerido',
+    })
+  }
+
+  const token = authHeader.split(' ')[1]
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+
+    req.user = decoded
+
+    next()
+  } catch (error) {
+    return res.status(401).json({
+      error: 'Token inválido o expirado',
+    })
+  }
+}
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function userFilter(username) {
+  const normalizedUsername = String(username || '').trim()
+
+  return {
+    username: {
+      $regex: `^${escapeRegex(normalizedUsername)}$`,
+      $options: 'i',
+    },
+  }
+}
+function requireAdmin(req, res, next) {
+  if (!['ADMIN', 'ROOT'].includes(req.user.role)) {
+    return res.status(403).json({
+      error: 'No tiene permisos para administrar usuarios',
+    })
+  }
+  next()
+}
+function requireRoot(req, res, next) {
+  if (!req.user || req.user.role !== 'ROOT') {
+    return res.status(403).json({
+      error: 'Acceso exclusivo para ROOT',
+    })
+  }
+
+  next()
+}
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function userFilter(username) {
+  const normalizedUsername = String(username || '').trim()
+
+  return {
+    username: {
+      $regex: `^${escapeRegex(normalizedUsername)}$`,
+      $options: 'i',
+    },
+  }
+}
+// ======================================================
+// ROOT - EXPLORADOR DE BASE DE DATOS
+// ======================================================
+
+// ------------------------------------------------------
+// ESTADO DE MONGODB
+// ------------------------------------------------------
+
+app.get('/api/admin/database/status', verifyToken, requireRoot, async (req, res) => {
+  try {
+    await db.command({ ping: 1 })
+
+    const collections = await db.listCollections().toArray()
+
+    res.json({
+      connected: true,
+      database: databaseName,
+      collections: collections.length,
+    })
+  } catch (error) {
+    console.error('Error consultando MongoDB:', error)
+
+    res.status(500).json({
+      connected: false,
+      error: 'No fue posible consultar MongoDB',
+    })
+  }
+})
+
+// ------------------------------------------------------
+// LISTAR COLECCIONES
+// ------------------------------------------------------
+
+app.get('/api/admin/database/collections', verifyToken, requireRoot, async (req, res) => {
+  try {
+    const collections = await db.listCollections().toArray()
+
+    const result = []
+
+    for (const collection of collections) {
+      const count = await db.collection(collection.name).countDocuments()
+
+      result.push({
+        name: collection.name,
+        documents: count,
+      })
+    }
+
+    result.sort((a, b) => a.name.localeCompare(b.name))
+
+    res.json({
+      database: databaseName,
+      total: result.length,
+      collections: result,
+    })
+  } catch (error) {
+    console.error('Error listando colecciones:', error)
+
+    res.status(500).json({
+      error: 'Error consultando colecciones',
+    })
+  }
+})
+
+// ------------------------------------------------------
+// VER DOCUMENTOS DE UNA COLECCIÓN
+// ------------------------------------------------------
+
+app.get(
+  '/api/admin/database/collections/:collection',
+  verifyToken,
+  requireRoot,
+  async (req, res) => {
+    try {
+      const collectionName = String(req.params.collection).trim()
+
+      // Solo permitir colecciones existentes
+      const collections = await db
+        .listCollections({ name: collectionName }, { nameOnly: true })
+        .toArray()
+
+      if (collections.length === 0) {
+        return res.status(404).json({
+          error: 'Colección no encontrada',
+        })
+      }
+
+      const page = Math.max(parseInt(req.query.page) || 1, 1)
+
+      const limit = Math.min(Math.max(parseInt(req.query.limit) || 25, 1), 100)
+
+      const skip = (page - 1) * limit
+
+      const total = await db.collection(collectionName).countDocuments()
+
+      const documents = await db
+        .collection(collectionName)
+        .find({})
+        .skip(skip)
+        .limit(limit)
+        .toArray()
+
+      // Nunca mostrar hashes de contraseña
+      if (collectionName === 'users') {
+        for (const user of documents) {
+          delete user.password
+          delete user.passwordHash
+        }
+      }
+
+      res.json({
+        database: databaseName,
+        collection: collectionName,
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        documents,
+      })
+    } catch (error) {
+      console.error('Error consultando colección:', error)
+
+      res.status(500).json({
+        error: 'Error consultando colección',
+      })
+    }
+  },
+)
+// ======================================================
+// BUSCAR DOCUMENTOS EN CHARACTERISTIC_POINTS
+// SOLO ROOT
+// ======================================================
+
+app.get('/api/admin/database/search', checkDatabase, verifyToken, requireRoot, async (req, res) => {
+  try {
+    const collectionName = String(req.query.collection || '').trim()
+
+    const searchText = String(req.query.q || '').trim()
+
+    // =====================================
+    // VALIDAR COLECCIÓN
+    // =====================================
+
+    if (!collectionName) {
+      return res.status(400).json({
+        error: 'Debe indicar una colección',
+      })
+    }
+
+    // Por seguridad, por ahora la búsqueda
+    // administrativa está limitada a
+    // characteristic_points
+    if (collectionName !== 'characteristic_points') {
+      return res.status(400).json({
+        error: 'La búsqueda solo está disponible para characteristic_points',
+      })
+    }
+
+    // =====================================
+    // VALIDAR TEXTO
+    // =====================================
+
+    if (!searchText) {
+      return res.json({
+        documents: [],
+        total: 0,
+      })
+    }
+
+    // Escapar caracteres especiales de RegExp
+    const escapedSearch = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    const regex = new RegExp(escapedSearch, 'i')
+
+    // =====================================
+    // BUSCAR
+    // =====================================
+
+    const documents = await db
+      .collection('characteristic_points')
+      .find({
+        $or: [
+          {
+            point_id: regex,
+          },
+          {
+            point_type: regex,
+          },
+          {
+            airport_id: regex,
+          },
+          {
+            comment: regex,
+          },
+        ],
+      })
+      .limit(100)
+      .toArray()
+
+    // =====================================
+    // RESPUESTA
+    // =====================================
+
+    return res.json({
+      documents,
+      total: documents.length,
+      query: searchText,
+    })
+  } catch (error) {
+    console.error('Error buscando en characteristic_points:', error)
+
+    return res.status(500).json({
+      error: 'Error realizando búsqueda en MongoDB',
+    })
+  }
+})
+// ======================================================
+// USERS - LISTAR
+// ======================================================
+
+app.get('/api/users', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const users = await db
+      .collection('users')
+      .find(
+        {},
+        {
+          projection: {
+            password: 0,
+            passwordHash: 0,
+          },
+        },
+      )
+      .sort({
+        role: 1,
+        username: 1,
+      })
+      .toArray()
+
+    res.json(users)
+  } catch (error) {
+    console.error('Error obteniendo usuarios:', error)
+
+    res.status(500).json({
+      error: 'Error obteniendo usuarios',
+    })
+  }
+})
+app.post('/api/users', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    let { username, password, airport, role = 'USER' } = req.body
+
+    username = username?.trim().toUpperCase()
+    airport = airport?.trim().toUpperCase() || null
+    role = role?.trim().toUpperCase()
+
+    if (!username || !password) {
+      return res.status(400).json({
+        error: 'Usuario y contraseña son obligatorios',
+      })
+    }
+
+    if (!['USER', 'ADMIN'].includes(role)) {
+      return res.status(400).json({
+        error: 'Rol no permitido',
+      })
+    }
+
+    const existing = await db.collection('users').findOne({ username })
+
+    if (existing) {
+      return res.status(409).json({
+        error: 'El usuario ya existe',
+      })
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12)
+
+    const newUser = {
+      username,
+      passwordHash: passwordHash,
+      airport,
+      role,
+      active: true,
+      mustChangePassword: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    await db.collection('users').insertOne(newUser)
+
+    res.status(201).json({
+      message: 'Usuario creado correctamente',
+      user: {
+        username,
+        airport,
+        role,
+        active: true,
+        mustChangePassword: true,
+      },
+    })
+  } catch (error) {
+    console.error('Error creando usuario:', error)
+
+    res.status(500).json({
+      error: 'Error creando usuario',
+    })
+  }
+})
+app.delete('/api/users/:username', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const username = String(req.params.username || '').trim()
+
+    const target = await db.collection('users').findOne(userFilter(username))
+
+    if (!target) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado',
+      })
+    }
+
+    // ROOT nunca se elimina
+    if (target.role === 'ROOT') {
+      return res.status(403).json({
+        error: 'El usuario ROOT no puede eliminarse',
+      })
+    }
+
+    const result = await db.collection('users').deleteOne({
+      _id: target._id,
+    })
+
+    res.json({
+      message: 'Usuario eliminado correctamente',
+      deleted: result.deletedCount === 1,
+    })
+  } catch (error) {
+    console.error('Error eliminando usuario:', error)
+
+    res.status(500).json({
+      error: 'Error eliminando usuario',
+    })
+  }
+})
 // =====================================
 // CONFIGURACIÓN
 // =====================================
 
 const PORT = 3000
+const JWT_SECRET = process.env.JWT_SECRET || 'atcfpl_desarrollo_local_2026'
 
 //const mongoURL =
 //  'mongodb://127.0.0.1:27017'
@@ -47,7 +467,96 @@ async function connectDB() {
     process.exit(1)
   }
 }
+app.put('/api/users/:username', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const username = String(req.params.username || '').trim()
 
+    const { airport, role, active } = req.body || {}
+
+    const target = await db.collection('users').findOne(userFilter(username))
+
+    if (!target) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado',
+      })
+    }
+
+    // Solo ROOT puede modificar a ROOT
+    if (target.role === 'ROOT' && req.user.role !== 'ROOT') {
+      return res.status(403).json({
+        error: 'Solo ROOT puede modificar este usuario',
+      })
+    }
+
+    const update = {
+      updatedAt: new Date(),
+    }
+
+    // Aeropuerto
+    if (airport !== undefined) {
+      update.airport = airport ? String(airport).trim().toUpperCase() : null
+    }
+
+    // Rol
+    if (role !== undefined) {
+      const normalizedRole = String(role).trim().toUpperCase()
+
+      if (!['USER', 'ADMIN'].includes(normalizedRole)) {
+        return res.status(400).json({
+          error: 'Rol no permitido',
+        })
+      }
+
+      // ROOT no puede perder su rol
+      if (target.role === 'ROOT') {
+        return res.status(403).json({
+          error: 'El rol ROOT no puede modificarse',
+        })
+      }
+
+      update.role = normalizedRole
+    }
+
+    // Activar / desactivar
+    if (typeof active === 'boolean') {
+      if (target.role === 'ROOT' && active === false) {
+        return res.status(403).json({
+          error: 'El usuario ROOT no puede deshabilitarse',
+        })
+      }
+
+      update.active = active
+    }
+
+    await db.collection('users').updateOne(
+      { _id: target._id },
+      {
+        $set: update,
+      },
+    )
+
+    const updatedUser = await db.collection('users').findOne(
+      { _id: target._id },
+      {
+        projection: {
+          password: 0,
+          passwordHash: 0,
+        },
+      },
+    )
+
+    res.json({
+      message: 'Usuario actualizado correctamente',
+      user: updatedUser,
+    })
+  } catch (error) {
+    console.error('Error actualizando usuario:', error)
+
+    res.status(500).json({
+      error: 'Error actualizando usuario',
+    })
+  }
+})
 // =====================================
 // COMPROBAR BASE DE DATOS
 // =====================================
@@ -61,7 +570,60 @@ function checkDatabase(req, res, next) {
 
   next()
 }
+app.put('/api/users/:username/password', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const username = String(req.params.username || '').trim()
 
+    const { password } = req.body || {}
+
+    if (!password || String(password).length < 8) {
+      return res.status(400).json({
+        error: 'La contraseña debe tener mínimo 8 caracteres',
+      })
+    }
+
+    const target = await db.collection('users').findOne(userFilter(username))
+
+    if (!target) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado',
+      })
+    }
+
+    // ADMIN no puede cambiar contraseña de ROOT
+    if (target.role === 'ROOT' && req.user.role !== 'ROOT') {
+      return res.status(403).json({
+        error: 'Solo ROOT puede cambiar esta contraseña',
+      })
+    }
+
+    const passwordHash = await bcrypt.hash(String(password), 12)
+
+    await db.collection('users').updateOne(
+      {
+        _id: target._id,
+      },
+      {
+        $set: {
+          passwordHash,
+          mustChangePassword: true,
+          updatedAt: new Date(),
+        },
+      },
+    )
+
+    res.json({
+      success: true,
+      message: `Contraseña de ${target.username} actualizada`,
+    })
+  } catch (error) {
+    console.error('Error cambiando contraseña:', error)
+
+    res.status(500).json({
+      error: 'Error cambiando contraseña',
+    })
+  }
+})
 // =====================================
 // STATUS
 // =====================================
@@ -87,7 +649,87 @@ app.get('/api/status', checkDatabase, async (req, res) => {
     })
   }
 })
+//
+// =====================================
+// AUTENTICACIÓN - LOGIN
+// =====================================
 
+app.post('/api/auth/login', checkDatabase, async (req, res) => {
+  try {
+    const { username, password } = req.body
+
+    if (!username || !password) {
+      return res.status(400).json({
+        error: 'Usuario y contraseña son obligatorios',
+      })
+    }
+
+    //const normalizedUsername = String(username).trim().toUpperCase()
+    //const user = await db.collection('users').findOne({
+    //  username: normalizedUsername,
+    //})
+    const normalizedUsername = String(username).trim()
+
+    const user = await db.collection('users').findOne({
+      username: {
+        $regex: `^${normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+        $options: 'i',
+      },
+    })
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Usuario o contraseña incorrectos',
+      })
+    }
+
+    if (!user.active) {
+      return res.status(403).json({
+        error: 'Usuario deshabilitado',
+      })
+    }
+
+    const validPassword = await bcrypt.compare(String(password), user.passwordHash)
+
+    if (!validPassword) {
+      return res.status(401).json({
+        error: 'Usuario o contraseña incorrectos',
+      })
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user._id.toString(),
+        username: user.username,
+        role: user.role,
+        airport: user.airport,
+      },
+      JWT_SECRET,
+      {
+        expiresIn: '8h',
+      },
+    )
+
+    res.json({
+      success: true,
+
+      user: {
+        username: user.username,
+        airport: user.airport,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      },
+
+      token,
+    })
+  } catch (error) {
+    console.error('Error en login:', error)
+
+    res.status(500).json({
+      error: 'Error interno del servidor',
+    })
+  }
+})
 // =====================================
 // OBTENER TODAS LAS AEROVÍAS
 //
@@ -506,279 +1148,771 @@ app.get('/api/characteristic-points/:pointId/routes', checkDatabase, async (req,
 // ACTUALIZAR UN PUNTO CARACTERÍSTICO
 // =====================================
 
-app.put('/api/characteristic-points/:pointId', checkDatabase, async (req, res) => {
-  try {
-    const currentPointId = String(req.params.pointId || '')
-      .trim()
-      .toUpperCase()
+// =====================================
+// ACTUALIZAR UN PUNTO CARACTERÍSTICO
+// SOLO ROOT
+// =====================================
+app.put(
+  '/api/admin/database/characteristic-points/:pointId',
+  checkDatabase,
+  verifyToken,
+  requireRoot,
+  async (req, res) => {
+    try {
+      const currentPointId = String(req.params.pointId || '')
+        .trim()
+        .toUpperCase()
 
-    // =====================================
-    // VALIDAR IDENTIFICADOR
-    // =====================================
+      // =====================================
+      // VALIDAR IDENTIFICADOR
+      // =====================================
 
-    if (!currentPointId) {
-      return res.status(400).json({
-        error: 'Punto característico no especificado',
-      })
-    }
-
-    // =====================================
-    // BUSCAR FIJO ACTUAL
-    // =====================================
-
-    const currentPoint = await db.collection('characteristic_points').findOne({
-      point_id: currentPointId,
-    })
-
-    if (!currentPoint) {
-      return res.status(404).json({
-        error: 'Punto característico no encontrado',
-        point_id: currentPointId,
-      })
-    }
-
-    const body = req.body || {}
-
-    // =====================================
-    // NUEVO IDENTIFICADOR
-    // =====================================
-
-    const newPointId = String(body.point_id || currentPointId)
-      .trim()
-      .toUpperCase()
-
-    if (!newPointId) {
-      return res.status(400).json({
-        error: 'El identificador del fijo es obligatorio',
-      })
-    }
-
-    // =====================================
-    // COORDENADAS
-    // =====================================
-
-    const latitude = Number(
-      body.latitude ?? body.position?.latitude ?? currentPoint.position?.latitude,
-    )
-
-    const longitude = Number(
-      body.longitude ?? body.position?.longitude ?? currentPoint.position?.longitude,
-    )
-
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-      return res.status(400).json({
-        error: 'Latitud no válida. Debe estar entre -90 y 90.',
-      })
-    }
-
-    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-      return res.status(400).json({
-        error: 'Longitud no válida. Debe estar entre -180 y 180.',
-      })
-    }
-
-    // =====================================
-    // VERIFICAR DUPLICADO SI CAMBIA NOMBRE
-    // =====================================
-
-    if (newPointId !== currentPointId) {
-      const duplicatedPoint = await db.collection('characteristic_points').findOne({
-        point_id: newPointId,
-      })
-
-      if (duplicatedPoint) {
-        return res.status(409).json({
-          error: `Ya existe un punto con el identificador ${newPointId}`,
+      if (!currentPointId) {
+        return res.status(400).json({
+          error: 'Punto característico no especificado',
         })
       }
-    }
 
-    // =====================================
-    // POSICIÓN DMS / RAW
-    // =====================================
+      // =====================================
+      // BUSCAR FIJO ACTUAL
+      // =====================================
 
-    const rawPosition = String(
-      body.position_raw ?? body.raw ?? body.position?.raw ?? currentPoint.position?.raw ?? '',
-    )
-      .trim()
-      .toUpperCase()
-
-    // =====================================
-    // DATOS A ACTUALIZAR
-    // =====================================
-
-    const updateData = {
-      point_id: newPointId,
-
-      position: {
-        raw: rawPosition,
-
-        latitude: latitude,
-
-        longitude: longitude,
-
-        geojson: {
-          type: 'Point',
-
-          // GeoJSON usa:
-          // [longitud, latitud]
-          coordinates: [longitude, latitude],
-        },
-      },
-
-      point_type: String(body.point_type ?? currentPoint.point_type ?? '')
-        .trim()
-        .toUpperCase(),
-
-      relevant_fix:
-        body.relevant_fix !== undefined
-          ? Boolean(body.relevant_fix)
-          : Boolean(currentPoint.relevant_fix),
-
-      airport_id:
-        body.airport_id !== undefined ? body.airport_id : (currentPoint.airport_id ?? null),
-
-      comment: body.comment !== undefined ? body.comment : (currentPoint.comment ?? null),
-
-      updated_at: new Date(),
-    }
-
-    // =====================================
-    // ACTUALIZAR CHARACTERISTIC_POINTS
-    // =====================================
-
-    const result = await db.collection('characteristic_points').findOneAndUpdate(
-      {
+      const currentPoint = await db.collection('characteristic_points').findOne({
         point_id: currentPointId,
-      },
+      })
 
-      {
-        $set: updateData,
-      },
+      if (!currentPoint) {
+        return res.status(404).json({
+          error: 'Punto característico no encontrado',
+          point_id: currentPointId,
+        })
+      }
 
-      {
-        returnDocument: 'after',
-      },
-    )
+      const body = req.body || {}
 
-    if (!result) {
-      return res.status(404).json({
-        error: 'No se pudo actualizar el punto',
+      // =====================================
+      // NUEVO IDENTIFICADOR
+      // =====================================
+
+      const newPointId = String(body.point_id || currentPointId)
+        .trim()
+        .toUpperCase()
+
+      if (!newPointId) {
+        return res.status(400).json({
+          error: 'El identificador del fijo es obligatorio',
+        })
+      }
+
+      // =====================================
+      // COORDENADAS
+      // =====================================
+
+      const latitude = Number(
+        body.latitude ?? body.position?.latitude ?? currentPoint.position?.latitude,
+      )
+
+      const longitude = Number(
+        body.longitude ?? body.position?.longitude ?? currentPoint.position?.longitude,
+      )
+
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+        return res.status(400).json({
+          error: 'Latitud no válida. Debe estar entre -90 y 90.',
+        })
+      }
+
+      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        return res.status(400).json({
+          error: 'Longitud no válida. Debe estar entre -180 y 180.',
+        })
+      }
+
+      // =====================================
+      // VERIFICAR DUPLICADO SI CAMBIA NOMBRE
+      // =====================================
+
+      if (newPointId !== currentPointId) {
+        const duplicatedPoint = await db.collection('characteristic_points').findOne({
+          point_id: newPointId,
+        })
+
+        if (duplicatedPoint) {
+          return res.status(409).json({
+            error: `Ya existe un punto con el identificador ${newPointId}`,
+          })
+        }
+      }
+
+      // =====================================
+      // POSICIÓN DMS / RAW
+      // =====================================
+
+      const rawPosition = String(
+        body.position_raw ?? body.raw ?? body.position?.raw ?? currentPoint.position?.raw ?? '',
+      )
+        .trim()
+        .toUpperCase()
+
+      // =====================================
+      // DATOS A ACTUALIZAR
+      // =====================================
+
+      const updateData = {
+        point_id: newPointId,
+
+        position: {
+          raw: rawPosition,
+
+          latitude: latitude,
+
+          longitude: longitude,
+
+          geojson: {
+            type: 'Point',
+
+            // GeoJSON usa:
+            // [longitud, latitud]
+            coordinates: [longitude, latitude],
+          },
+        },
+
+        point_type: String(body.point_type ?? currentPoint.point_type ?? '')
+          .trim()
+          .toUpperCase(),
+
+        relevant_fix:
+          body.relevant_fix !== undefined
+            ? Boolean(body.relevant_fix)
+            : Boolean(currentPoint.relevant_fix),
+
+        airport_id:
+          body.airport_id !== undefined ? body.airport_id : (currentPoint.airport_id ?? null),
+
+        comment: body.comment !== undefined ? body.comment : (currentPoint.comment ?? null),
+
+        updated_at: new Date(),
+      }
+
+      // =====================================
+      // ACTUALIZAR CHARACTERISTIC_POINTS
+      // =====================================
+
+      const result = await db.collection('characteristic_points').findOneAndUpdate(
+        {
+          point_id: currentPointId,
+        },
+
+        {
+          $set: updateData,
+        },
+
+        {
+          returnDocument: 'after',
+        },
+      )
+
+      if (!result) {
+        return res.status(404).json({
+          error: 'No se pudo actualizar el punto',
+        })
+      }
+
+      // =====================================
+      // ACTUALIZAR ROUTES SI CAMBIÓ EL NOMBRE
+      // =====================================
+
+      let routesUpdated = 0
+
+      if (newPointId !== currentPointId) {
+        const allRoutes = await db.collection('routes').find({}).toArray()
+
+        for (const route of allRoutes) {
+          if (!Array.isArray(route.points)) {
+            continue
+          }
+
+          let changed = false
+
+          const newPoints = route.points.map((item) => {
+            // Punto guardado como string
+            if (typeof item === 'string') {
+              if (String(item).trim().toUpperCase() === currentPointId) {
+                changed = true
+
+                return newPointId
+              }
+
+              return item
+            }
+
+            // Punto guardado como objeto
+            if (item && typeof item === 'object') {
+              const itemId = getPointId(item)
+
+              if (itemId !== currentPointId) {
+                return item
+              }
+
+              changed = true
+
+              const updatedItem = {
+                ...item,
+              }
+
+              if (Object.prototype.hasOwnProperty.call(updatedItem, 'route_point')) {
+                updatedItem.route_point = newPointId
+              }
+
+              if (Object.prototype.hasOwnProperty.call(updatedItem, 'point_id')) {
+                updatedItem.point_id = newPointId
+              }
+
+              if (Object.prototype.hasOwnProperty.call(updatedItem, 'name')) {
+                updatedItem.name = newPointId
+              }
+
+              if (Object.prototype.hasOwnProperty.call(updatedItem, 'id')) {
+                updatedItem.id = newPointId
+              }
+
+              return updatedItem
+            }
+
+            return item
+          })
+
+          // =====================================
+          // GUARDAR AEROVÍA MODIFICADA
+          // =====================================
+
+          if (changed) {
+            await db.collection('routes').updateOne(
+              {
+                _id: route._id,
+              },
+
+              {
+                $set: {
+                  points: newPoints,
+                  updated_at: new Date(),
+                },
+              },
+            )
+
+            routesUpdated++
+          }
+        }
+      }
+
+      // =====================================
+      // RESPUESTA
+      // =====================================
+
+      res.json({
+        message: 'Punto característico actualizado correctamente',
+
+        renamed: newPointId !== currentPointId,
+
+        previous_point_id: currentPointId,
+
+        point_id: newPointId,
+
+        routes_updated: routesUpdated,
+
+        point: result,
+      })
+    } catch (error) {
+      console.error('Error actualizando punto característico:', error)
+
+      res.status(500).json({
+        error: 'Error actualizando punto característico',
       })
     }
+  },
+)
+// ======================================================
+// AGREGAR PUNTO CARACTERÍSTICO
+// SOLO ROOT
+// ======================================================
 
-    // =====================================
-    // ACTUALIZAR ROUTES SI CAMBIÓ EL NOMBRE
-    // =====================================
+app.post(
+  '/api/admin/database/characteristic-points',
+  checkDatabase,
+  verifyToken,
+  requireRoot,
+  async (req, res) => {
+    try {
+      const {
+        point_id,
+        point_type,
+        latitude,
+        longitude,
+        position_raw,
+        relevant_fix,
+        airport_id,
+        comment,
+      } = req.body || {}
 
-    let routesUpdated = 0
+      // =====================================
+      // IDENTIFICADOR
+      // =====================================
 
-    if (newPointId !== currentPointId) {
-      const allRoutes = await db.collection('routes').find({}).toArray()
+      const pointId = String(point_id || '')
+        .trim()
+        .toUpperCase()
 
-      for (const route of allRoutes) {
+      if (!pointId) {
+        return res.status(400).json({
+          error: 'El identificador del punto es obligatorio',
+        })
+      }
+
+      // =====================================
+      // VERIFICAR QUE NO EXISTA
+      // =====================================
+
+      const existingPoint = await db.collection('characteristic_points').findOne({
+        point_id: pointId,
+      })
+
+      if (existingPoint) {
+        return res.status(409).json({
+          error: `El punto ${pointId} ya existe`,
+        })
+      }
+
+      // =====================================
+      // COORDENADAS
+      // =====================================
+
+      const lat = Number(latitude)
+      const lon = Number(longitude)
+
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+          error: 'La latitud debe estar entre -90 y 90',
+        })
+      }
+
+      if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+        return res.status(400).json({
+          error: 'La longitud debe estar entre -180 y 180',
+        })
+      }
+
+      // =====================================
+      // CREAR DOCUMENTO
+      // =====================================
+
+      const newPoint = {
+        point_id: pointId,
+
+        point_type: String(point_type || '')
+          .trim()
+          .toUpperCase(),
+
+        position: {
+          latitude: lat,
+          longitude: lon,
+          raw: String(position_raw || '').trim(),
+        },
+
+        relevant_fix: Boolean(relevant_fix),
+
+        airport_id: airport_id ? String(airport_id).trim().toUpperCase() : null,
+
+        comment: comment ? String(comment).trim() : null,
+
+        created_at: new Date(),
+
+        created_by: req.user?.username || 'ROOT',
+      }
+
+      // =====================================
+      // INSERTAR EN MONGODB
+      // =====================================
+
+      const result = await db.collection('characteristic_points').insertOne(newPoint)
+
+      console.log(`ROOT ${req.user?.username || ''} creó el punto ${pointId}`)
+
+      return res.status(201).json({
+        message: `Punto ${pointId} creado correctamente`,
+
+        point: {
+          _id: result.insertedId,
+          ...newPoint,
+        },
+      })
+    } catch (error) {
+      console.error('Error creando punto característico:', error)
+
+      return res.status(500).json({
+        error: 'Error creando punto característico',
+      })
+    }
+  },
+)
+// ======================================================
+// INSERTAR PUNTO ENTRE DOS FIJOS DE UNA AEROVÍA
+// SOLO ROOT
+// ======================================================
+
+app.post(
+  '/api/admin/database/routes/:routeName/insert-point',
+  checkDatabase,
+  verifyToken,
+  requireRoot,
+  async (req, res) => {
+    try {
+      const routeName = String(req.params.routeName || '')
+        .trim()
+        .toUpperCase()
+
+      const pointId = String(req.body?.point_id || '')
+        .trim()
+        .toUpperCase()
+
+      const previousPoint = String(req.body?.previous_point || '')
+        .trim()
+        .toUpperCase()
+
+      const nextPoint = String(req.body?.next_point || '')
+        .trim()
+        .toUpperCase()
+
+      // =====================================
+      // VALIDAR DATOS
+      // =====================================
+
+      if (!routeName || !pointId || !previousPoint || !nextPoint) {
+        return res.status(400).json({
+          error: 'Aerovía, punto nuevo, punto anterior y punto siguiente son obligatorios',
+        })
+      }
+
+      // =====================================
+      // VERIFICAR QUE EL PUNTO NUEVO EXISTA
+      // =====================================
+
+      const point = await db.collection('characteristic_points').findOne({
+        point_id: pointId,
+      })
+
+      if (!point) {
+        return res.status(404).json({
+          error: `El punto ${pointId} no existe en characteristic_points`,
+        })
+      }
+
+      // =====================================
+      // BUSCAR AEROVÍA
+      // =====================================
+
+      const route = await db.collection('routes').findOne({
+        route_name: routeName,
+      })
+
+      if (!route) {
+        return res.status(404).json({
+          error: `La aerovía ${routeName} no existe`,
+        })
+      }
+
+      if (!Array.isArray(route.points)) {
+        return res.status(400).json({
+          error: `La aerovía ${routeName} no tiene una lista válida de puntos`,
+        })
+      }
+
+      // =====================================
+      // FUNCIÓN PARA OBTENER ID DEL PUNTO
+      // =====================================
+
+      const getRoutePointId = (item) => {
+        if (typeof item === 'string') {
+          return item.trim().toUpperCase()
+        }
+
+        if (item && typeof item === 'object') {
+          return String(item.route_point || item.point_id || item.name || item.id || item.raw || '')
+            .trim()
+            .toUpperCase()
+        }
+
+        return ''
+      }
+
+      // =====================================
+      // EVITAR DUPLICADOS
+      // =====================================
+
+      const alreadyExists = route.points.some((item) => getRoutePointId(item) === pointId)
+
+      if (alreadyExists) {
+        return res.status(409).json({
+          error: `El punto ${pointId} ya pertenece a la aerovía ${routeName}`,
+        })
+      }
+
+      // =====================================
+      // BUSCAR LOS DOS FIJOS CONSECUTIVOS
+      // =====================================
+
+      let insertIndex = -1
+
+      for (let i = 0; i < route.points.length - 1; i++) {
+        const currentPoint = getRoutePointId(route.points[i])
+
+        const followingPoint = getRoutePointId(route.points[i + 1])
+
+        if (currentPoint === previousPoint && followingPoint === nextPoint) {
+          insertIndex = i + 1
+          break
+        }
+      }
+
+      if (insertIndex === -1) {
+        return res.status(400).json({
+          error: `${previousPoint} y ${nextPoint} no son puntos consecutivos en ${routeName}`,
+        })
+      }
+
+      // =====================================
+      // CONSERVAR EL FORMATO DE route.points
+      // =====================================
+
+      const referencePoint = route.points[insertIndex - 1]
+
+      let newRoutePoint = pointId
+
+      if (referencePoint && typeof referencePoint === 'object') {
+        if (Object.prototype.hasOwnProperty.call(referencePoint, 'route_point')) {
+          newRoutePoint = {
+            route_point: pointId,
+          }
+        } else if (Object.prototype.hasOwnProperty.call(referencePoint, 'point_id')) {
+          newRoutePoint = {
+            point_id: pointId,
+          }
+        } else if (Object.prototype.hasOwnProperty.call(referencePoint, 'name')) {
+          newRoutePoint = {
+            name: pointId,
+          }
+        } else if (Object.prototype.hasOwnProperty.call(referencePoint, 'id')) {
+          newRoutePoint = {
+            id: pointId,
+          }
+        }
+      }
+
+      // =====================================
+      // INSERTAR EN LA POSICIÓN
+      // =====================================
+
+      const newPoints = [...route.points]
+
+      newPoints.splice(insertIndex, 0, newRoutePoint)
+
+      // =====================================
+      // ACTUALIZAR AEROVÍA
+      // =====================================
+
+      const result = await db.collection('routes').updateOne(
+        {
+          _id: route._id,
+        },
+        {
+          $set: {
+            points: newPoints,
+            updated_at: new Date(),
+          },
+        },
+      )
+
+      if (result.modifiedCount !== 1) {
+        return res.status(500).json({
+          error: `No fue posible actualizar la aerovía ${routeName}`,
+        })
+      }
+
+      console.log(
+        `ROOT ${req.user?.username || ''} insertó ` +
+          `${pointId} en ${routeName} entre ` +
+          `${previousPoint} y ${nextPoint}`,
+      )
+
+      return res.json({
+        message: `Punto ${pointId} insertado correctamente en ${routeName}`,
+
+        route_name: routeName,
+
+        point_id: pointId,
+
+        inserted_between: {
+          previous: previousPoint,
+          next: nextPoint,
+        },
+
+        position: insertIndex + 1,
+
+        total_points: newPoints.length,
+      })
+    } catch (error) {
+      console.error('Error insertando punto en aerovía:', error)
+
+      return res.status(500).json({
+        error: 'Error insertando punto en aerovía',
+      })
+    }
+  },
+)
+// ======================================================
+// ELIMINAR PUNTO CARACTERÍSTICO
+// SOLO ROOT
+// También elimina el punto de las aerovías
+// ======================================================
+
+app.delete(
+  '/api/admin/database/characteristic-points/:pointId',
+  checkDatabase,
+  verifyToken,
+  requireRoot,
+  async (req, res) => {
+    try {
+      const pointId = String(req.params.pointId || '')
+        .trim()
+        .toUpperCase()
+
+      if (!pointId) {
+        return res.status(400).json({
+          error: 'Debe especificar el punto a eliminar',
+        })
+      }
+
+      // =====================================
+      // 1. VERIFICAR QUE EL PUNTO EXISTA
+      // =====================================
+
+      const point = await db.collection('characteristic_points').findOne({
+        point_id: pointId,
+      })
+
+      if (!point) {
+        return res.status(404).json({
+          error: `El punto ${pointId} no existe`,
+        })
+      }
+
+      // =====================================
+      // 2. BUSCAR TODAS LAS AEROVÍAS
+      // =====================================
+
+      const routes = await db.collection('routes').find({}).toArray()
+
+      const routesToUpdate = []
+
+      // =====================================
+      // 3. BUSCAR EL PUNTO EN CADA AEROVÍA
+      // =====================================
+
+      for (const route of routes) {
         if (!Array.isArray(route.points)) {
           continue
         }
 
-        let changed = false
+        const newPoints = route.points.filter((item) => {
+          let id = ''
 
-        const newPoints = route.points.map((item) => {
-          // Punto guardado como string
           if (typeof item === 'string') {
-            if (String(item).trim().toUpperCase() === currentPointId) {
-              changed = true
-
-              return newPointId
-            }
-
-            return item
+            id = item
+          } else if (item && typeof item === 'object') {
+            id = item.route_point || item.point_id || item.name || item.id || item.raw || ''
           }
 
-          // Punto guardado como objeto
-          if (item && typeof item === 'object') {
-            const itemId = getPointId(item)
-
-            if (itemId !== currentPointId) {
-              return item
-            }
-
-            changed = true
-
-            const updatedItem = {
-              ...item,
-            }
-
-            if (Object.prototype.hasOwnProperty.call(updatedItem, 'route_point')) {
-              updatedItem.route_point = newPointId
-            }
-
-            if (Object.prototype.hasOwnProperty.call(updatedItem, 'point_id')) {
-              updatedItem.point_id = newPointId
-            }
-
-            if (Object.prototype.hasOwnProperty.call(updatedItem, 'name')) {
-              updatedItem.name = newPointId
-            }
-
-            if (Object.prototype.hasOwnProperty.call(updatedItem, 'id')) {
-              updatedItem.id = newPointId
-            }
-
-            return updatedItem
-          }
-
-          return item
+          return String(id).trim().toUpperCase() !== pointId
         })
 
-        // =====================================
-        // GUARDAR AEROVÍA MODIFICADA
-        // =====================================
-
-        if (changed) {
-          await db.collection('routes').updateOne(
-            {
-              _id: route._id,
-            },
-
-            {
-              $set: {
-                points: newPoints,
-                updated_at: new Date(),
-              },
-            },
-          )
-
-          routesUpdated++
+        // Si cambió la cantidad de puntos,
+        // significa que esta aerovía utilizaba el fijo.
+        if (newPoints.length !== route.points.length) {
+          routesToUpdate.push({
+            _id: route._id,
+            route_name: route.route_name,
+            points: newPoints,
+          })
         }
       }
+
+      // =====================================
+      // 4. ACTUALIZAR LAS AEROVÍAS
+      // =====================================
+
+      const updatedRoutes = []
+
+      for (const route of routesToUpdate) {
+        await db.collection('routes').updateOne(
+          {
+            _id: route._id,
+          },
+          {
+            $set: {
+              points: route.points,
+              updated_at: new Date(),
+            },
+          },
+        )
+
+        updatedRoutes.push(route.route_name || String(route._id))
+      }
+
+      // =====================================
+      // 5. ELIMINAR EL PUNTO
+      // =====================================
+
+      const result = await db.collection('characteristic_points').deleteOne({
+        point_id: pointId,
+      })
+
+      if (result.deletedCount !== 1) {
+        return res.status(500).json({
+          error: `No fue posible eliminar ${pointId}`,
+        })
+      }
+
+      // =====================================
+      // 6. REGISTRO EN TERMINAL
+      // =====================================
+
+      console.log(`ROOT ${req.user?.username || ''} eliminó el punto ${pointId}`)
+
+      if (updatedRoutes.length > 0) {
+        console.log('Aerovías actualizadas:', updatedRoutes)
+      }
+
+      // =====================================
+      // 7. RESPUESTA
+      // =====================================
+
+      return res.json({
+        message: `Punto ${pointId} eliminado correctamente`,
+
+        point_id: pointId,
+
+        routes_updated: updatedRoutes,
+
+        total_routes_updated: updatedRoutes.length,
+      })
+    } catch (error) {
+      console.error('Error eliminando punto característico:', error)
+
+      return res.status(500).json({
+        error: 'Error eliminando punto característico',
+      })
     }
-
-    // =====================================
-    // RESPUESTA
-    // =====================================
-
-    res.json({
-      message: 'Punto característico actualizado correctamente',
-
-      renamed: newPointId !== currentPointId,
-
-      previous_point_id: currentPointId,
-
-      point_id: newPointId,
-
-      routes_updated: routesUpdated,
-
-      point: result,
-    })
-  } catch (error) {
-    console.error('Error actualizando punto característico:', error)
-
-    res.status(500).json({
-      error: 'Error actualizando punto característico',
-    })
-  }
-})
+  },
+)
 // =====================================
 // PLANES DE VUELO
 // =====================================
@@ -1047,18 +2181,6 @@ function getPointId(point) {
 }
 
 // =====================================
-// ENDPOINT NO ENCONTRADO
-// =====================================
-
-app.use('/api', (req, res) => {
-  res.status(404).json({
-    error: 'Endpoint no encontrado',
-
-    path: req.originalUrl,
-  })
-})
-
-// =====================================
 // INICIAR SERVIDOR
 // =====================================
 
@@ -1082,5 +2204,318 @@ async function startServer() {
     console.log('')
   })
 }
+// ======================================================
+// SID - MAPA
+// ======================================================
+
+app.get('/api/sids/:procedureName/map', async (req, res) => {
+  try {
+    const procedureName = req.params.procedureName.toUpperCase()
+
+    const sid = await db.collection('sids').findOne({
+      procedure_name: procedureName,
+    })
+
+    if (!sid) {
+      return res.status(404).json({
+        error: `SID ${procedureName} no encontrada`,
+      })
+    }
+
+    const pointIds = sid.points || []
+
+    const characteristicPoints = await db
+      .collection('characteristic_points')
+      .find({
+        point_id: { $in: pointIds },
+      })
+      .toArray()
+
+    const pointMap = new Map(characteristicPoints.map((point) => [point.point_id, point]))
+
+    // Mantener exactamente el orden de la SID
+    const points = pointIds.map((pointId, index) => {
+      const point = pointMap.get(pointId)
+
+      if (!point) {
+        return {
+          sequence: index + 1,
+          point_id: pointId,
+          found: false,
+        }
+      }
+
+      return {
+        sequence: index + 1,
+
+        point_id: point.point_id,
+
+        latitude: point.position?.latitude ?? null,
+
+        longitude: point.position?.longitude ?? null,
+
+        geojson: point.position?.geojson ?? null,
+
+        point_type: point.point_type ?? null,
+
+        relevant_fix: point.relevant_fix ?? false,
+
+        found: true,
+      }
+    })
+
+    res.json({
+      procedure_name: sid.procedure_name,
+
+      type: 'SID',
+
+      airport_id: sid.airport_id,
+
+      runway: sid.runway,
+
+      performance_categories: sid.performance_categories || [],
+
+      eligible_routes: sid.eligible_routes || [],
+
+      total_points: points.length,
+
+      points,
+    })
+  } catch (error) {
+    console.error('Error generando mapa SID:', error)
+
+    res.status(500).json({
+      error: 'Error generando mapa de SID',
+    })
+  }
+})
+
+// ======================================================
+// STAR - MAPA
+// ======================================================
+
+app.get('/api/stars/:procedureName/map', async (req, res) => {
+  try {
+    const procedureName = req.params.procedureName.toUpperCase()
+
+    const star = await db.collection('stars').findOne({
+      procedure_name: procedureName,
+    })
+
+    if (!star) {
+      return res.status(404).json({
+        error: `STAR ${procedureName} no encontrada`,
+      })
+    }
+
+    const pointIds = star.points || []
+
+    const characteristicPoints = await db
+      .collection('characteristic_points')
+      .find({
+        point_id: { $in: pointIds },
+      })
+      .toArray()
+
+    const pointMap = new Map(characteristicPoints.map((point) => [point.point_id, point]))
+
+    const points = pointIds.map((pointId, index) => {
+      const point = pointMap.get(pointId)
+
+      if (!point) {
+        return {
+          sequence: index + 1,
+          point_id: pointId,
+          found: false,
+        }
+      }
+
+      return {
+        sequence: index + 1,
+
+        point_id: point.point_id,
+
+        latitude: point.position?.latitude ?? null,
+
+        longitude: point.position?.longitude ?? null,
+
+        geojson: point.position?.geojson ?? null,
+
+        point_type: point.point_type ?? null,
+
+        relevant_fix: point.relevant_fix ?? false,
+
+        found: true,
+      }
+    })
+
+    res.json({
+      procedure_name: star.procedure_name,
+
+      type: 'STAR',
+
+      airport_id: star.airport_id,
+
+      runway: star.runway,
+
+      performance_categories: star.performance_categories || [],
+
+      atg_ils: star.atg_ils ?? null,
+
+      eligible_routes: star.eligible_routes || [],
+
+      total_points: points.length,
+
+      points,
+    })
+  } catch (error) {
+    console.error('Error generando mapa STAR:', error)
+
+    res.status(500).json({
+      error: 'Error generando mapa de STAR',
+    })
+  }
+})
+// ======================================================
+// OBTENER LISTA DE AEROPUERTOS
+// ROOT / ADMIN
+// ======================================================
+
+app.get('/api/airports', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    const role = String(req.user?.role || '')
+      .trim()
+      .toUpperCase()
+
+    // Solo ROOT y ADMIN pueden consultar
+    // la lista completa de aeropuertos
+    if (!['ROOT', 'ADMIN'].includes(role)) {
+      return res.status(403).json({
+        error: 'No tiene permisos para consultar todos los aeropuertos',
+      })
+    }
+
+    const airports = await db
+      .collection('airports')
+      .find(
+        {},
+        {
+          projection: {
+            _id: 0,
+            airport_id: 1,
+            name: 1,
+            airport_name: 1,
+            city: 1,
+            altitude: 1,
+          },
+        },
+      )
+      .sort({
+        airport_id: 1,
+      })
+      .toArray()
+
+    return res.json(airports)
+  } catch (error) {
+    console.error('Error obteniendo aeropuertos:', error)
+
+    return res.status(500).json({
+      error: 'Error obteniendo la lista de aeropuertos',
+    })
+  }
+})
+// ======================================================
+// PROCEDIMIENTOS SID / STAR POR AEROPUERTO
+// ======================================================
+
+app.get('/api/airports/:airportId/procedures', async (req, res) => {
+  try {
+    const airportId = req.params.airportId.trim().toUpperCase()
+
+    // Verificar que el aeropuerto exista
+    const airport = await db.collection('airports').findOne({
+      airport_id: airportId,
+    })
+
+    if (!airport) {
+      return res.status(404).json({
+        error: `Aeropuerto ${airportId} no encontrado`,
+      })
+    }
+
+    // Buscar SID
+    const sids = await db
+      .collection('sids')
+      .find({
+        airport_id: airportId,
+      })
+      .project({
+        _id: 0,
+        procedure_name: 1,
+        runway: 1,
+        performance_categories: 1,
+        points: 1,
+        eligible_routes: 1,
+      })
+      .sort({
+        runway: 1,
+        procedure_name: 1,
+      })
+      .toArray()
+
+    // Buscar STAR
+    const stars = await db
+      .collection('stars')
+      .find({
+        airport_id: airportId,
+      })
+      .project({
+        _id: 0,
+        procedure_name: 1,
+        runway: 1,
+        performance_categories: 1,
+        points: 1,
+        eligible_routes: 1,
+      })
+      .sort({
+        runway: 1,
+        procedure_name: 1,
+      })
+      .toArray()
+
+    // Pistas
+    const runways = Array.isArray(airport.runways)
+      ? airport.runways.map((runway) => ({
+          runway: runway.runway,
+          default: runway.default,
+          heading_true_deg: runway.heading_true_deg,
+          location: runway.location,
+        }))
+      : []
+
+    res.json({
+      airport_id: airportId,
+
+      altitude: airport.altitude || null,
+
+      runways,
+
+      counts: {
+        sids: sids.length,
+        stars: stars.length,
+      },
+
+      sids,
+
+      stars,
+    })
+  } catch (error) {
+    console.error('Error cargando procedimientos del aeropuerto:', error)
+
+    res.status(500).json({
+      error: 'Error interno al cargar procedimientos',
+    })
+  }
+})
 
 startServer()

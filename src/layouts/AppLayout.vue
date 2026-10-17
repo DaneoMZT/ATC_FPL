@@ -1,14 +1,12 @@
 <template>
-  <div class="app-layout">
+  <!-- LOGIN: se muestra completamente solo -->
+  <RouterView v-if="isLoginPage" />
 
-    <AppSidebar
-      @collapse-change="handleSidebarChange"
-    />
+  <!-- APLICACIÓN ATCFPL -->
+  <div v-else class="app-layout">
+    <AppSidebar @collapse-change="handleSidebarChange" />
 
-    <div
-      class="app-main"
-      :class="{ collapsed: sidebarCollapsed }"
-    >
+    <div class="app-main" :class="{ collapsed: sidebarCollapsed }">
       <AppHeader />
 
       <main class="page-content">
@@ -17,19 +15,24 @@
 
       <AppFooter />
     </div>
-
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { RouterView } from 'vue-router'
+import { ref, computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 import AppFooter from '../components/AppFooter.vue'
 
+const route = useRoute()
+
 const sidebarCollapsed = ref(false)
+
+const isLoginPage = computed(() => {
+  return route.name === 'login'
+})
 
 function handleSidebarChange(value) {
   sidebarCollapsed.value = value

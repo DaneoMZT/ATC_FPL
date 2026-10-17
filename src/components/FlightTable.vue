@@ -48,10 +48,7 @@ defineProps({
           </td>
 
           <td>
-            <span
-              class="status"
-              :class="flight.status.toLowerCase()"
-            >
+            <span class="status" :class="flight.status.toLowerCase()">
               {{ flight.status }}
             </span>
           </td>

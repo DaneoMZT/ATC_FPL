@@ -1,4 +1,5 @@
 const express = require('express')
+const aftnAddressesRouter = require('./routes/aftnAddresses')
 
 const { MongoClient, ObjectId } = require('mongodb')
 
@@ -11,6 +12,45 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
+
+// Directorio AFTN local
+app.use('/api/aftn-addresses', verifyToken, aftnAddressesRouter)
+
+// ========================================
+// MENSAJERÍA ATS - SERVICIO SIMULADOR TCP
+// ========================================
+const { simulateAtsMessage } = require('./services/atsSimulatorService')
+
+// ========================================
+// MENSAJERÍA ATS - SIMULADOR TCP
+// ========================================
+
+app.post('/api/messages/simulate', verifyToken, async (req, res) => {
+  try {
+    // Disponible únicamente en el backend local
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        error: 'Simulador ATS deshabilitado en producción',
+      })
+    }
+
+    const result = await simulateAtsMessage(req.body)
+
+    return res.json({
+      ...result,
+      mode: 'SIMULATION',
+      aftnDelivered: false,
+    })
+  } catch (error) {
+    console.error('Error simulando mensaje ATS:', error.message)
+
+    return res.status(400).json({
+      success: false,
+      error: error.message,
+    })
+  }
+})
 
 // ======================================================
 // AUTENTICACIÓN JWT
@@ -1431,6 +1471,589 @@ app.put(
     }
   },
 )
+// Consultar tipos de aeronaves
+app.get('/api/aircraft-types', async (req, res) => {
+  try {
+    const q = String(req.query.q || '')
+      .trim()
+      .toUpperCase()
+
+    if (q.length > 10) {
+      return res.status(400).json({
+        error: 'Búsqueda demasiado larga',
+      })
+    }
+
+    const db = client.db('atc_database')
+
+    const filtro = q
+      ? { designator: { $regex: '^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') } }
+      : {}
+
+    const aircraft = await db
+      .collection('aircraft_types')
+      .find(filtro, {
+        projection: {
+          _id: 0,
+          designator: 1,
+          wake_category: 1,
+          performance_family_id: 1,
+        },
+      })
+      .sort({ designator: 1 })
+      .limit(30)
+      .toArray()
+
+    res.json(aircraft)
+  } catch (error) {
+    console.error('Error consultando aircraft_types:', error)
+
+    res.status(500).json({
+      error: 'Error al consultar tipos de aeronaves',
+    })
+  }
+})
+
+// =====================================
+// ITEM 15 - RENDIMIENTO DE AERONAVES
+// =====================================
+
+app.get('/api/aircraft-performance/:designator', async (req, res) => {
+  try {
+    const designator = req.params.designator.toUpperCase()
+
+    const aircraft = await db.collection('aircraft_types').findOne({
+      designator,
+    })
+
+    if (!aircraft) {
+      return res.status(404).json({
+        error: 'Aeronave no encontrada',
+      })
+    }
+
+    const family = await db.collection('aircraft_performance_families').findOne({
+      family_id: aircraft.performance_family_id,
+    })
+
+    if (!family) {
+      return res.status(404).json({
+        error: 'Familia de rendimiento no encontrada',
+      })
+    }
+
+    const levels = (family.performance || []).map((item) => ({
+      level: `F${String(item.altitude_layer.flight_level).padStart(3, '0')}`,
+      altitude_ft: item.altitude_layer.altitude_ft,
+      speed: item.cruise_speed.raw,
+    }))
+
+    res.json({
+      designator,
+      family_id: family.family_id,
+      levels,
+    })
+  } catch (error) {
+    console.error('Error ITEM 15:', error.message)
+
+    res.status(500).json({
+      error: 'Error al consultar rendimiento',
+    })
+  }
+})
+// ======================================================
+// ITEM 15 - GENERACIÓN AUTOMÁTICA DE RUTAS
+// ======================================================
+
+function routeDistanceKm(a, b) {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLon = (b.lon - a.lon) * rad
+
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2
+
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+// ======================================================
+// ITEM 16 - CÁLCULO AUTOMÁTICO DEL EET POR RUTA
+// ======================================================
+
+app.get('/api/flight-eet', checkDatabase, async (req, res) => {
+  try {
+    const origin = String(req.query.origin || '')
+      .trim()
+      .toUpperCase()
+    const destination = String(req.query.destination || '')
+      .trim()
+      .toUpperCase()
+    const routeText = String(req.query.route || '')
+      .trim()
+      .toUpperCase()
+    const speed = String(req.query.speed || '')
+      .trim()
+      .toUpperCase()
+
+    // Validar aeródromos y ruta
+    if (
+      !/^[A-Z]{4}$/.test(origin) ||
+      !/^[A-Z]{4}$/.test(destination) ||
+      origin === destination ||
+      !routeText ||
+      routeText.length > 2000
+    ) {
+      return res.status(400).json({
+        error: 'Origen, destino o ruta no válidos.',
+      })
+    }
+
+    // Validar velocidad en nudos o kilómetros por hora
+    const speedMatch = /^([NK])(\d{4})$/.exec(speed)
+
+    if (!speedMatch) {
+      return res.status(400).json({
+        error: 'Indica velocidad Ndddd o Kdddd. Mach no está soportado.',
+      })
+    }
+
+    const speedKt = Number(speedMatch[2]) * (speedMatch[1] === 'K' ? 1 / 1.852 : 1)
+
+    if (speedKt <= 0) {
+      return res.status(400).json({
+        error: 'Velocidad no válida.',
+      })
+    }
+
+    // Consultar aeródromos
+    const airports = await db
+      .collection('airports')
+      .find({
+        airport_id: { $in: [origin, destination] },
+      })
+      .toArray()
+
+    function airportCoords(id) {
+      const airport = airports.find((a) => a.airport_id === id)
+
+      const runway = airport?.runways?.find((r) => r.default) || airport?.runways?.[0]
+
+      const lat = Number(runway?.location?.latitude)
+      const lon = Number(runway?.location?.longitude)
+
+      return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
+    }
+
+    const from = airportCoords(origin)
+    const to = airportCoords(destination)
+
+    if (!from || !to) {
+      return res.status(422).json({
+        error: 'Faltan coordenadas de aeródromos.',
+      })
+    }
+
+    // Separar los elementos de la ruta
+    const tokens = routeText.split(/\s+/).filter(Boolean)
+
+    // Consultar aerovías
+    const airways = await db
+      .collection('routes')
+      .find({
+        route_name: {
+          $in: tokens.filter((t) => t !== 'DCT'),
+        },
+      })
+      .toArray()
+
+    const airwayMap = new Map(airways.map((a) => [String(a.route_name).toUpperCase(), a]))
+
+    // Obtener identificador de un punto
+    function pointId(item) {
+      return String(
+        typeof item === 'string'
+          ? item
+          : item?.route_point || item?.point_id || item?.name || item?.id || item?.raw || '',
+      )
+        .trim()
+        .toUpperCase()
+    }
+
+    // Reunir puntos de la ruta y aerovías
+    const fixIds = new Set(tokens.filter((t) => t !== 'DCT' && !airwayMap.has(t)))
+
+    for (const airway of airways) {
+      for (const item of airway.points || []) {
+        fixIds.add(pointId(item))
+      }
+    }
+
+    fixIds.delete('')
+
+    // Consultar coordenadas
+    const fixes = await db
+      .collection('characteristic_points')
+      .find(
+        {
+          point_id: { $in: [...fixIds] },
+        },
+        {
+          projection: {
+            point_id: 1,
+            position: 1,
+          },
+        },
+      )
+      .toArray()
+
+    const positions = new Map()
+
+    for (const fix of fixes) {
+      const lat = Number(fix.position?.latitude)
+      const lon = Number(fix.position?.longitude)
+
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        positions.set(String(fix.point_id).toUpperCase(), { lat, lon })
+      }
+    }
+
+    // Expandir aerovías en puntos intermedios
+    const expanded = []
+
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i]
+
+      if (token === 'DCT') continue
+
+      if (airwayMap.has(token)) {
+        const start = expanded[expanded.length - 1]
+        const end = tokens[i + 1]
+        const airway = airwayMap.get(token)
+
+        if (!start || !end || !positions.has(end)) {
+          return res.status(422).json({
+            error: `Tramo incompleto para ${token}.`,
+          })
+        }
+
+        const ordered = [...(airway.points || [])]
+          .sort((a, b) => Number(a?.sequence ?? 0) - Number(b?.sequence ?? 0))
+          .map(pointId)
+
+        const first = ordered.indexOf(start)
+        const last = ordered.indexOf(end)
+
+        if (first < 0 || last < 0 || first === last) {
+          return res.status(422).json({
+            error: `${start} y ${end} no forman un tramo válido de ${token}.`,
+          })
+        }
+
+        const direction = last > first ? 1 : -1
+        const sense = String(airway.sense || '').toUpperCase()
+
+        // Por ahora, únicamente aerovías bidireccionales
+        if (sense !== 'B') {
+          return res.status(422).json({
+            error: `La dirección de ${token} requiere validación.`,
+          })
+        }
+
+        for (let j = first + direction; j !== last + direction; j += direction) {
+          expanded.push(ordered[j])
+        }
+
+        i++
+      } else {
+        if (!positions.has(token)) {
+          return res.status(422).json({
+            error: `Punto no localizado: ${token}.`,
+          })
+        }
+
+        expanded.push(token)
+      }
+    }
+
+    if (!expanded.length) {
+      return res.status(422).json({
+        error: 'La ruta no contiene puntos reconocidos.',
+      })
+    }
+
+    // Coordenadas del recorrido completo
+    const coords = [from, ...expanded.map((id) => positions.get(id)), to]
+
+    // Sumar distancias de todos los tramos
+    let distanceKm = 0
+
+    for (let i = 1; i < coords.length; i++) {
+      distanceKm += routeDistanceKm(coords[i - 1], coords[i])
+    }
+
+    // Convertir kilómetros a millas náuticas
+    const distanceNm = distanceKm / 1.852
+
+    // Calcular EET
+    const minutes = Math.ceil((distanceNm / speedKt) * 60)
+
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+
+    const eet = `${String(hours).padStart(2, '0')}:` + `${String(mins).padStart(2, '0')}`
+
+    // Respuesta
+    return res.json({
+      origin,
+      destination,
+      distance_nm: Math.round(distanceNm),
+      speed_kt: Math.round(speedKt),
+      eet,
+      expanded_points: expanded,
+      calculation: 'route_based_approx',
+      warning: 'Estimación sin SID/STAR, ascenso, descenso ni viento. No usar operacionalmente.',
+    })
+  } catch (error) {
+    console.error('Error calculando EET:', error)
+
+    return res.status(500).json({
+      error: 'No fue posible calcular EET.',
+    })
+  }
+})
+
+app.get('/api/route-suggestions', checkDatabase, async (req, res) => {
+  try {
+    const origin = String(req.query.origin || '')
+      .trim()
+      .toUpperCase()
+    const destination = String(req.query.destination || '')
+      .trim()
+      .toUpperCase()
+
+    if (!/^[A-Z]{4}$/.test(origin) || !/^[A-Z]{4}$/.test(destination) || origin === destination) {
+      return res.status(400).json({
+        error: 'Indica dos aeródromos ICAO diferentes.',
+      })
+    }
+
+    const airports = await db
+      .collection('airports')
+      .find({ airport_id: { $in: [origin, destination] } })
+      .toArray()
+
+    const airportPosition = (code) => {
+      const airport = airports.find((a) => a.airport_id === code)
+      const runway = airport?.runways?.find((r) => r.default) || airport?.runways?.[0]
+
+      const lat = Number(runway?.location?.latitude)
+      const lon = Number(runway?.location?.longitude)
+
+      return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null
+    }
+
+    const from = airportPosition(origin)
+    const to = airportPosition(destination)
+
+    if (!from || !to) {
+      return res.status(404).json({
+        error: 'No hay coordenadas disponibles para ambos aeródromos.',
+      })
+    }
+
+    const [routes, fixes] = await Promise.all([
+      db.collection('routes').find({}).toArray(),
+      db
+        .collection('characteristic_points')
+        .find(
+          {},
+          {
+            projection: { point_id: 1, position: 1 },
+          },
+        )
+        .toArray(),
+    ])
+
+    const positions = new Map()
+
+    for (const fix of fixes) {
+      const id = String(fix.point_id || '')
+        .trim()
+        .toUpperCase()
+      const lat = Number(fix.position?.latitude)
+      const lon = Number(fix.position?.longitude)
+
+      if (id && Number.isFinite(lat) && Number.isFinite(lon)) {
+        positions.set(id, { lat, lon })
+      }
+    }
+
+    const graph = new Map()
+
+    const addEdge = (a, b, airway) => {
+      if (!positions.has(a) || !positions.has(b) || a === b) return
+
+      const km = routeDistanceKm(positions.get(a), positions.get(b))
+
+      if (!Number.isFinite(km) || km > 700) return
+
+      if (!graph.has(a)) graph.set(a, [])
+
+      graph.get(a).push({ to: b, airway, km })
+    }
+
+    for (const route of routes) {
+      // Primera versión: solo aerovías bidireccionales.
+      if (String(route.sense || '').toUpperCase() !== 'B') continue
+
+      const airway = String(route.route_name || '')
+        .trim()
+        .toUpperCase()
+      const ordered = [...(route.points || [])].sort(
+        (a, b) => Number(a.sequence) - Number(b.sequence),
+      )
+
+      for (let i = 1; i < ordered.length; i++) {
+        const a = String(ordered[i - 1].point_id || '')
+          .trim()
+          .toUpperCase()
+        const b = String(ordered[i].point_id || '')
+          .trim()
+          .toUpperCase()
+
+        addEdge(a, b, airway)
+        addEdge(b, a, airway)
+      }
+    }
+
+    const nearest = (airport) => {
+      return [...graph.keys()]
+        .map((id) => ({
+          id,
+          km: routeDistanceKm(airport, positions.get(id)),
+        }))
+        .filter((item) => item.km <= 150)
+        .sort((a, b) => a.km - b.km)
+        .slice(0, 8)
+    }
+
+    const starts = nearest(from)
+    const ends = nearest(to)
+
+    if (!starts.length || !ends.length) {
+      return res.status(404).json({
+        error: 'No se encontraron puntos de aerovía cercanos a ambos aeródromos.',
+      })
+    }
+
+    const endCosts = new Map(ends.map((x) => [x.id, x.km]))
+    const distances = new Map()
+    const previous = new Map()
+    const queue = []
+
+    for (const start of starts) {
+      distances.set(start.id, start.km)
+      queue.push({ id: start.id, cost: start.km })
+    }
+
+    let bestEnd = null
+    let bestTotal = Infinity
+    let iterations = 0
+
+    while (queue.length && iterations++ < 50000) {
+      queue.sort((a, b) => a.cost - b.cost)
+
+      const current = queue.shift()
+
+      if (current.cost !== distances.get(current.id)) continue
+      if (current.cost >= bestTotal) break
+
+      if (endCosts.has(current.id)) {
+        const total = current.cost + endCosts.get(current.id)
+
+        if (total < bestTotal) {
+          bestTotal = total
+          bestEnd = current.id
+        }
+      }
+
+      for (const edge of graph.get(current.id) || []) {
+        const cost = current.cost + edge.km
+
+        if (cost < (distances.get(edge.to) ?? Infinity)) {
+          distances.set(edge.to, cost)
+
+          previous.set(edge.to, {
+            id: current.id,
+            airway: edge.airway,
+          })
+
+          queue.push({ id: edge.to, cost })
+        }
+      }
+    }
+
+    if (!bestEnd) {
+      return res.status(404).json({
+        error: 'No se encontró una conexión entre las aerovías disponibles.',
+      })
+    }
+
+    const steps = []
+    let cursor = bestEnd
+
+    while (previous.has(cursor)) {
+      const prev = previous.get(cursor)
+
+      steps.push({
+        point: cursor,
+        airway: prev.airway,
+      })
+
+      cursor = prev.id
+    }
+
+    steps.reverse()
+
+    const compact = [cursor]
+    let currentAirway = null
+    let lastPoint = cursor
+
+    for (const step of steps) {
+      if (step.airway !== currentAirway) {
+        if (currentAirway && compact[compact.length - 1] !== lastPoint) {
+          compact.push(lastPoint)
+        }
+
+        compact.push(step.airway)
+        currentAirway = step.airway
+      }
+
+      lastPoint = step.point
+    }
+
+    if (compact[compact.length - 1] !== lastPoint) {
+      compact.push(lastPoint)
+    }
+
+    return res.json({
+      origin,
+      destination,
+      route: compact.join(' '),
+      first_fix: cursor,
+      last_fix: bestEnd,
+      distance_km_approx: Math.round(bestTotal),
+      warning:
+        'Ruta propuesta para revisión. Verificar SID/STAR, enlaces, restricciones y vigencia.',
+    })
+  } catch (error) {
+    console.error('Error generando ruta:', error)
+
+    return res.status(500).json({
+      error: 'No fue posible generar la ruta.',
+    })
+  }
+})
 // ======================================================
 // AGREGAR PUNTO CARACTERÍSTICO
 // SOLO ROOT
@@ -1947,7 +2570,7 @@ app.get('/api/flight-plans', checkDatabase, async (req, res) => {
 
 app.get('/api/flight-plans/:id', checkDatabase, async (req, res) => {
   try {
-    const id = req.params.id
+    const { id } = req.params
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -2058,7 +2681,7 @@ app.post('/api/flight-plans', checkDatabase, async (req, res) => {
 
 app.put('/api/flight-plans/:id', checkDatabase, async (req, res) => {
   try {
-    const id = req.params.id
+    const { id } = req.params
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -2114,7 +2737,7 @@ app.put('/api/flight-plans/:id', checkDatabase, async (req, res) => {
 
 app.delete('/api/flight-plans/:id', checkDatabase, async (req, res) => {
   try {
-    const id = req.params.id
+    const { id } = req.params
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -2180,6 +2803,45 @@ function getPointId(point) {
     .toUpperCase()
 }
 
+// =====================================
+// CATÁLOGO DE AERÓDROMOS - FPL
+// =====================================
+
+app.get('/api/airports', checkDatabase, async (req, res) => {
+  try {
+    const q = String(req.query.q || '')
+      .trim()
+      .toUpperCase()
+
+    if (q && !/^[A-Z0-9]{1,4}$/.test(q)) {
+      return res.status(400).json({
+        error: 'Búsqueda de aeródromo inválida',
+      })
+    }
+
+    const filter = q ? { airport_id: { $regex: `^${q}` } } : {}
+
+    const airports = await db
+      .collection('airports')
+      .find(filter, {
+        projection: {
+          _id: 0,
+          airport_id: 1,
+        },
+      })
+      .sort({ airport_id: 1 })
+      .limit(100)
+      .toArray()
+
+    res.json(airports)
+  } catch (error) {
+    console.error('Error consultando aeródromos:', error)
+
+    res.status(500).json({
+      error: 'No se pudo consultar el catálogo de aeródromos',
+    })
+  }
+})
 // =====================================
 // INICIAR SERVIDOR
 // =====================================

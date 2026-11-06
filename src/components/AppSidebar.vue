@@ -10,7 +10,9 @@
     ====================================== -->
 
     <div class="brand">
-      <div class="brand-icon">✦</div>
+      <div class="brand-icon">
+        <img src="@/assets/Logo_dashboard.png" alt="Logo ATCFPL" class="sidebar-logo" />
+      </div>
 
       <div v-if="!isCollapsed" class="brand-text">
         <h1>
@@ -49,13 +51,15 @@
         <span v-if="!isCollapsed" class="menu-text"> Dashboard </span>
       </RouterLink>
 
-      <!-- PLANES -->
+      <!-- =====================================
+       PLANES DE VUELO - MENSAJERÍA ATS
+      ====================================== -->
 
-      <a class="menu-item" href="#" title="Planes de vuelo">
+      <RouterLink to="/ats-messaging" class="menu-item" title="Planes de vuelo">
         <span class="menu-icon"> ✈ </span>
 
         <span v-if="!isCollapsed" class="menu-text"> Planes de vuelo </span>
-      </a>
+      </RouterLink>
 
       <!-- RUTAS -->
 
@@ -117,6 +121,7 @@
 </template>
 
 <script setup>
+import { Route } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 

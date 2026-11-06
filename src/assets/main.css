@@ -4,7 +4,6 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap');
 
-
 /* TEXTO GENERAL */
 
 html,
@@ -12,7 +11,6 @@ body,
 #app {
   font-family: 'Inter', sans-serif;
 }
-
 
 /* FORMULARIOS */
 
@@ -22,7 +20,6 @@ select,
 textarea {
   font-family: 'Inter', sans-serif;
 }
-
 
 /* ==========================================
    TÍTULOS
@@ -41,7 +38,6 @@ h6 {
   letter-spacing: 0.5px;
 }
 
-
 /* ==========================================
    MENÚ Y BOTONES
 ========================================== */
@@ -58,7 +54,6 @@ h6 {
   letter-spacing: 0.4px;
 }
 
-
 /* ==========================================
    MARCA ATCFPL
 ========================================== */
@@ -70,7 +65,6 @@ h6 {
 
   letter-spacing: 1.5px;
 }
-
 
 /* ==========================================
    DATOS TÉCNICOS
@@ -85,7 +79,6 @@ h6 {
 .point-label {
   font-family: 'JetBrains Mono', monospace !important;
 }
-
 
 /* ==========================================
    TABLAS
@@ -106,7 +99,6 @@ th {
 td {
   font-family: 'Inter', sans-serif;
 }
-
 
 /* ==========================================
    FOOTER
@@ -234,4 +226,785 @@ body,
 
 body {
   overflow-x: hidden;
+}
+/* ==========================================
+   ITEM 10 - EQUIPAMIENTO OACI COMPACTO
+========================================== */
+
+.equipment-selector {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 12px;
+  box-sizing: border-box;
+}
+
+.equipment-dropdown {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: #091522;
+  border: 1px solid #20384d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ENCABEZADO DEL MENÚ */
+
+.equipment-dropdown summary {
+  display: block;
+  padding: 11px 12px;
+  color: #55d1d9;
+  font-size: 10px !important;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* CONTENEDOR DE OPCIONES */
+
+.equipment-dropdown .equipment-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  max-height: 230px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  border-top: 1px solid #20384d;
+}
+
+/* CADA OPCIÓN */
+
+.equipment-dropdown .equipment-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  margin: 0;
+  padding: 7px 9px;
+  box-sizing: border-box;
+
+  background: #07131f;
+  border: 1px solid #20384d;
+  border-radius: 4px;
+  cursor: pointer;
+
+  font-size: 10px !important;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+/* CORREGIR CHECKBOX GIGANTES */
+
+.equipment-dropdown .equipment-option input[type='checkbox'] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+
+  display: inline-block;
+  position: static;
+
+  width: 14px !important;
+  min-width: 14px !important;
+  max-width: 14px !important;
+
+  height: 14px !important;
+  min-height: 14px !important;
+  max-height: 14px !important;
+
+  flex: 0 0 14px;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: initial;
+  box-shadow: none;
+  accent-color: #16a2ad;
+  cursor: pointer;
+}
+
+/* CÓDIGO OACI */
+
+.equipment-dropdown .equipment-option strong {
+  display: inline-block;
+  flex: 0 0 25px;
+  color: #55d1d9;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px !important;
+}
+
+/* DESCRIPCIÓN DEL EQUIPO */
+
+.equipment-dropdown .equipment-option span {
+  display: block;
+  flex: 1;
+  min-width: 0;
+
+  color: #b7c8d8;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px !important;
+  font-weight: 400;
+
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+/* EFECTO AL PASAR EL CURSOR */
+
+.equipment-dropdown .equipment-option:hover {
+  background: #102334;
+  border-color: #16a2ad;
+}
+
+/* RESPONSIVO */
+
+@media (max-width: 700px) {
+  .equipment-dropdown .equipment-options {
+    grid-template-columns: 1fr;
+  }
+}
+/* ==========================================
+   HEADER - RELOJ UTC Y HORA LOCAL
+========================================== */
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 82px;
+  box-sizing: border-box;
+}
+
+/* Contenedor del reloj y botón cerrar */
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  flex-shrink: 0;
+}
+
+/* Relojes */
+.flight-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  min-width: 115px;
+}
+
+/* Hora UTC */
+.clock-utc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #55d1d9;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.clock-utc span {
+  color: #55d1d9;
+  font-size: 10px !important;
+  font-weight: 600;
+}
+
+/* Hora local */
+.clock-local {
+  color: #9bafc2;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px !important;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Botón cerrar */
+.header-right .close {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+}
+
+/* Pantallas pequeñas */
+@media (max-width: 700px) {
+  .modal-header {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  .flight-clock {
+    min-width: 0;
+  }
+
+  .clock-utc {
+    font-size: 13px !important;
+  }
+
+  .clock-utc span {
+    font-size: 9px !important;
+  }
+
+  .clock-local {
+    font-size: 10px !important;
+  }
+}
+/* ==========================================
+   ITEM 18 - SELECTOR PBN
+========================================== */
+
+.pbn-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.pbn-field .equipment-selector {
+  width: 100%;
+  min-width: 0;
+}
+
+.pbn-field .equipment-dropdown {
+  width: 100%;
+}
+
+.pbn-field .equipment-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.pbn-field > input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'JetBrains Mono', monospace;
+  color: #55d1d9;
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .pbn-field .equipment-options {
+    grid-template-columns: 1fr;
+  }
+}
+/* ==========================================
+   ITEM 18 - DOF FECHA DE VUELO
+========================================== */
+
+.dof-field {
+  min-width: 0;
+}
+
+.dof-field input[type='date'] {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: #091522;
+  border: 1px solid #20384d;
+  border-radius: 5px;
+  color: #b7c8d8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color-scheme: dark;
+}
+
+.dof-field input[type='date']:focus {
+  outline: none;
+  border-color: #16a2ad;
+}
+
+.dof-field input[readonly] {
+  color: #55d1d9;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+/* ==========================================
+   ITEM 18 - OPR OPERADOR DE AERONAVE
+   LISTA COMPACTA
+========================================== */
+
+.opr-field {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Contenedor de operadores */
+.operator-options {
+  width: 100%;
+  max-height: 105px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #091522;
+  border: 1px solid #20384d;
+  border-radius: 5px;
+  box-sizing: border-box;
+}
+
+/* Cada operador */
+.operator-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid #20384d;
+  border-radius: 0;
+  background: transparent;
+  color: #b7c8d8;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* Código OACI del operador */
+.operator-option strong {
+  flex: 0 0 34px;
+  color: #55d1d9;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+}
+
+/* Nombre del operador */
+.operator-option span {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Efecto al pasar el cursor */
+.operator-option:hover {
+  background: #153047;
+  color: #ffffff;
+}
+
+/* Último elemento */
+.operator-option:last-child {
+  border-bottom: none;
+}
+
+/* Barra de desplazamiento */
+.operator-options::-webkit-scrollbar {
+  width: 5px;
+}
+
+.operator-options::-webkit-scrollbar-track {
+  background: #091522;
+}
+
+.operator-options::-webkit-scrollbar-thumb {
+  background: #35546b;
+  border-radius: 5px;
+}
+
+.operator-options::-webkit-scrollbar-thumb:hover {
+  background: #55d1d9;
+}
+
+/* Campos de búsqueda y captura */
+.opr-field > input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+/* Texto de ayuda */
+.opr-field small {
+  color: #8fa6ba;
+  font-size: 10px;
+}
+
+/* Adaptación a pantallas pequeñas */
+@media (max-width: 700px) {
+  .operator-options {
+    max-height: 95px;
+  }
+
+  .operator-option {
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+}
+/* ==========================================
+   ATCFPL - FORMULARIO FPL
+   ESPACIADO Y DISTRIBUCIÓN
+========================================== */
+
+/* Contenedor principal */
+.fpl-layout {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px 16px 24px;
+}
+
+/* Separación entre secciones */
+.fpl-layout .section {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 22px;
+  box-sizing: border-box;
+}
+
+/* Títulos de los ítems */
+.fpl-layout .section-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+/* Cuadrículas */
+.fpl-layout .grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  column-gap: 16px;
+  row-gap: 18px;
+  align-items: start;
+  box-sizing: border-box;
+}
+
+/* Dos columnas */
+.fpl-layout .grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Tres columnas */
+.fpl-layout .grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Cuatro columnas */
+.fpl-layout .grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Campos que ocupan dos columnas */
+.fpl-layout .span-2 {
+  grid-column: span 2;
+}
+
+/* Contenedor de cada campo */
+.fpl-layout .field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Etiquetas */
+.fpl-layout .field > label {
+  display: block;
+  margin: 0;
+  min-height: 14px;
+  color: #829db2;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Entradas */
+.fpl-layout .field > input,
+.fpl-layout .field > select,
+.fpl-layout .field > textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 9px 11px;
+  box-sizing: border-box;
+  border: 1px solid #20384d;
+  border-radius: 5px;
+  background: #091522;
+  color: #c7d8e7;
+  font-size: 12px;
+}
+
+/* Foco */
+.fpl-layout .field > input:focus,
+.fpl-layout .field > select:focus,
+.fpl-layout .field > textarea:focus {
+  outline: none;
+  border-color: #16a2ad;
+}
+
+/* Descripciones */
+.fpl-layout .field > small {
+  display: block;
+  margin: 0;
+  color: #7892a8;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* ITEM 15 - Ruta */
+.fpl-layout .route-field {
+  width: 100%;
+  min-width: 0;
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+.fpl-layout .route-field textarea {
+  min-height: 85px;
+  resize: vertical;
+}
+
+/* Botón para generar ruta */
+.fpl-layout .route-field > button {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 14px;
+}
+
+/* Resultados de búsqueda */
+.fpl-layout .airport-field,
+.fpl-layout .grid .field {
+  position: relative;
+}
+
+/* Menús de búsqueda de aeródromos y aeronaves */
+.fpl-layout .airport-results,
+.fpl-layout .aircraft-results {
+  width: 100%;
+  min-width: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  z-index: 20;
+}
+
+/* ==========================================
+   PANTALLAS MEDIANAS
+========================================== */
+
+@media (max-width: 1100px) {
+  .fpl-layout .grid-4,
+  .fpl-layout .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fpl-layout .grid {
+    column-gap: 14px;
+    row-gap: 18px;
+  }
+}
+
+/* ==========================================
+   PANTALLAS PEQUEÑAS
+========================================== */
+
+@media (max-width: 650px) {
+  .fpl-layout {
+    padding: 10px 12px 20px;
+  }
+
+  .fpl-layout .grid-2,
+  .fpl-layout .grid-3,
+  .fpl-layout .grid-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fpl-layout .span-2 {
+    grid-column: auto;
+  }
+
+  .fpl-layout .section {
+    margin-bottom: 18px;
+  }
+
+  .fpl-layout .grid {
+    row-gap: 16px;
+  }
+
+  .fpl-layout .route-field > button {
+    width: 100%;
+  }
+}
+/* ==========================================
+   ATCFPL - ITEM 18
+   CORRECCIÓN DE ESPACIADO Y DISTRIBUCIÓN
+========================================== */
+
+/* Cuadrícula principal */
+.tab-content:has(.pbn-field) .grid.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 18px;
+  row-gap: 22px;
+  align-items: start;
+}
+
+/* Todos los campos */
+.tab-content:has(.pbn-field) .field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Etiquetas */
+.tab-content:has(.pbn-field) .field > label {
+  display: block;
+  min-height: 14px;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Inputs generales */
+.tab-content:has(.pbn-field) .field > input,
+.tab-content:has(.pbn-field) .field > select,
+.tab-content:has(.pbn-field) .field > textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Descripciones */
+.tab-content:has(.pbn-field) .field > small {
+  display: block;
+  margin: 0;
+  min-height: 12px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #7892a8;
+}
+
+/* PBN ocupa las tres columnas */
+.tab-content:has(.pbn-field) .pbn-field {
+  grid-column: 1 / -1;
+}
+
+/* DOF */
+.tab-content:has(.pbn-field) .dof-field {
+  grid-column: auto;
+  min-width: 0;
+}
+
+/* Calendario y código OACI */
+.tab-content:has(.pbn-field) .dof-date-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 85px;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+}
+
+.tab-content:has(.pbn-field) .dof-date-container input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 40px;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.tab-content:has(.pbn-field) .dof-date-container .dof-code {
+  width: 85px;
+  max-width: 85px;
+  text-align: center;
+}
+
+/* REG */
+.tab-content:has(.pbn-field) .field:has(input[v-model='form.reg']) {
+  grid-column: auto;
+}
+
+/* OPR */
+.tab-content:has(.pbn-field) .opr-field {
+  grid-column: auto;
+  min-width: 0;
+}
+
+/* Lista de operadores */
+.tab-content:has(.pbn-field) .operator-options {
+  width: 100%;
+  max-height: 105px;
+  box-sizing: border-box;
+}
+
+/* RMK ocupa todo el ancho */
+.tab-content:has(.pbn-field) .field:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+/* Pantallas medianas */
+@media (max-width: 1050px) {
+  .tab-content:has(.pbn-field) .grid.grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+    row-gap: 20px;
+  }
+
+  .tab-content:has(.pbn-field) .pbn-field {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Pantallas pequeñas */
+@media (max-width: 650px) {
+  .tab-content:has(.pbn-field) .grid.grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 18px;
+  }
+
+  .tab-content:has(.pbn-field) .pbn-field,
+  .tab-content:has(.pbn-field) .field:has(textarea) {
+    grid-column: 1;
+  }
+}
+.sidebar-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
 }

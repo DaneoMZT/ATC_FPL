@@ -6,6 +6,7 @@ const { MongoClient, ObjectId } = require('mongodb')
 const cors = require('cors')
 
 const bcrypt = require('bcrypt')
+const { createTrafficSimulatorRouter } = require('./routes/trafficSimulator')
 
 const jwt = require('jsonwebtoken')
 const app = express()
@@ -610,6 +611,30 @@ function checkDatabase(req, res, next) {
 
   next()
 }
+const trafficSimulatorAccess = (req, res, next) => {
+  const host = String(req.headers.host || '').split(':')[0]
+
+  if (
+    process.env.NODE_ENV !== 'development' ||
+    process.env.TRAFFIC_SIM_ENABLED !== 'true' ||
+    !['127.0.0.1', 'localhost'].includes(req.hostname) ||
+    !['127.0.0.1', 'localhost'].includes(host)
+  ) {
+    return res.status(403).json({
+      error: 'Simulador deshabilitado',
+    })
+  }
+
+  next()
+}
+
+app.use(
+  '/api/traffic-simulator',
+  checkDatabase,
+  verifyToken,
+  trafficSimulatorAccess,
+  (req, res, next) => createTrafficSimulatorRouter(db)(req, res, next),
+)
 app.put('/api/users/:username/password', verifyToken, requireAdmin, async (req, res) => {
   try {
     const username = String(req.params.username || '').trim()
@@ -1633,7 +1658,7 @@ app.get('/api/flight-eet', checkDatabase, async (req, res) => {
       })
       .toArray()
 
-    function airportCoords(id) {
+    const airportCoords = (id) => {
       const airport = airports.find((a) => a.airport_id === id)
 
       const runway = airport?.runways?.find((r) => r.default) || airport?.runways?.[0]
@@ -1669,7 +1694,7 @@ app.get('/api/flight-eet', checkDatabase, async (req, res) => {
     const airwayMap = new Map(airways.map((a) => [String(a.route_name).toUpperCase(), a]))
 
     // Obtener identificador de un punto
-    function pointId(item) {
+    const pointId = (item) => {
       return String(
         typeof item === 'string'
           ? item
@@ -2544,11 +2569,95 @@ app.delete(
 // OBTENER TODOS LOS PLANES
 // =====================================
 
-app.get('/api/flight-plans', checkDatabase, async (req, res) => {
+// DASHBOARD: acceso restringido al aeropuerto del usuario autenticado.
+// ROOT puede supervisar la cuenta indicada mediante ?username=...
+const DASHBOARD_AIRPORT_CODES = {
+  MZT: 'MMMZ',
+  CUL: 'MMCL',
+  SJD: 'MMSD',
+  TIJ: 'MMTJ',
+  HMO: 'MMHO',
+  LAP: 'MMLP',
+  CEN: 'MMCN',
+  MXL: 'MMML',
+  CSL: 'MMSL',
+  DGO: 'MMDO',
+  LMM: 'MMLM',
+  GYM: 'MMGM',
+  LTO: 'MMLT',
+}
+function dashboardAirport(value) {
+  const code = String(value || '')
+    .trim()
+    .toUpperCase()
+  return /^[A-Z]{4}$/.test(code) ? code : DASHBOARD_AIRPORT_CODES[code] || ''
+}
+app.get('/api/dashboard/users', checkDatabase, verifyToken, requireRoot, async (req, res) => {
   try {
+    const users = await db
+      .collection('users')
+      .find({ active: true }, { projection: { username: 1, role: 1, airport: 1 } })
+      .sort({ username: 1 })
+      .toArray()
+    res.json(
+      users
+        .filter((user) => dashboardAirport(user.airport))
+        .map((user) => ({
+          username: user.username,
+          role: user.role,
+          airport: dashboardAirport(user.airport),
+        })),
+    )
+  } catch (error) {
+    console.error('Error consultando usuarios de Dashboard:', error)
+    res.status(500).json({ error: 'No se pudieron consultar los usuarios' })
+  }
+})
+app.get('/api/dashboard/flight-plans', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    const current = await db.collection('users').findOne({ _id: new ObjectId(req.user.userId) })
+    if (!current || !current.active) return res.status(403).json({ error: 'Cuenta no autorizada' })
+    let target = current
+    if (current.role === 'ROOT') {
+      const username = String(req.query.username || '').trim()
+      if (!username) return res.json({ airport: null, username: null, flights: [] })
+      target = await db.collection('users').findOne(userFilter(username))
+      if (!target || !target.active)
+        return res.status(404).json({ error: 'Usuario no encontrado o inactivo' })
+    }
+    const airport = dashboardAirport(target.airport)
+    if (!airport)
+      return res.status(422).json({ error: 'El usuario no tiene aeropuerto válido asignado' })
+    const flights = await db
+      .collection('flight_plans')
+      .find({
+        $or: [{ departure: airport }, { destination: airport }],
+      })
+      .sort({ created_at: -1 })
+      .toArray()
+    res.json({ username: target.username, airport, flights })
+  } catch (error) {
+    console.error('Error consultando Dashboard:', error)
+    res.status(500).json({ error: 'No se pudieron consultar los vuelos del Dashboard' })
+  }
+})
+
+app.get('/api/flight-plans', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    const current = await db.collection('users').findOne({ _id: new ObjectId(req.user.userId) })
+    if (!current || !current.active) return res.status(403).json({ error: 'Cuenta no autorizada' })
+    const airport = dashboardAirport(current.airport)
+    if (current.role !== 'ROOT' && !airport)
+      return res.status(422).json({ error: 'Aeropuerto no configurado' })
+    const filter =
+      current.role === 'ROOT'
+        ? {}
+        : {
+            $or: [{ departure: airport }, { destination: airport }],
+          }
     const flightPlans = await db
       .collection('flight_plans')
-      .find({})
+      .find(filter)
       .sort({
         created_at: -1,
       })
@@ -2560,40 +2669,6 @@ app.get('/api/flight-plans', checkDatabase, async (req, res) => {
 
     res.status(500).json({
       error: 'Error obteniendo planes de vuelo',
-    })
-  }
-})
-
-// =====================================
-// OBTENER UN PLAN POR ID
-// =====================================
-
-app.get('/api/flight-plans/:id', checkDatabase, async (req, res) => {
-  try {
-    const { id } = req.params
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: 'ID de plan no válido',
-      })
-    }
-
-    const flightPlan = await db.collection('flight_plans').findOne({
-      _id: new ObjectId(id),
-    })
-
-    if (!flightPlan) {
-      return res.status(404).json({
-        error: 'Plan de vuelo no encontrado',
-      })
-    }
-
-    res.json(flightPlan)
-  } catch (error) {
-    console.error('Error obteniendo plan:', error)
-
-    res.status(500).json({
-      error: 'Error obteniendo plan de vuelo',
     })
   }
 })
@@ -2732,6 +2807,298 @@ app.put('/api/flight-plans/:id', checkDatabase, async (req, res) => {
 })
 
 // =====================================
+// MODIFICAR PLAN DE VUELO (CHG)
+// =====================================
+
+app.put('/api/flight-plans/:id/chg', checkDatabase, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        error: 'ID de plan no válido',
+      })
+    }
+
+    const collection = db.collection('flight_plans')
+    const _id = new ObjectId(id)
+    const current = await collection.findOne({ _id })
+
+    if (!current) {
+      return res.status(404).json({
+        error: 'Plan de vuelo no encontrado',
+      })
+    }
+
+    // Verificar que el plan permita modificaciones
+    const lifecycle = String(current.lifecycle || '').toUpperCase()
+    const status = String(current.status || '').toUpperCase()
+
+    if (
+      ['CANCELLED', 'DEPARTED', 'ARRIVED'].includes(lifecycle) ||
+      ['CNL', 'CANCELLED'].includes(status) ||
+      current.departed_at ||
+      current.arrived_at
+    ) {
+      return res.status(409).json({
+        error: 'El estado actual no permite CHG',
+      })
+    }
+
+    const body = req.body || {}
+    const changes = {}
+    const previous = {}
+
+    // =====================================
+    // MODIFICAR EOBT (UTC)
+    // =====================================
+
+    if (body.eobt !== undefined) {
+      const match = /^([01]\d|2[0-3]):?([0-5]\d)$/.exec(String(body.eobt).trim())
+
+      if (!match) {
+        return res.status(400).json({
+          error: 'EOBT no válido. Utilice HH:mm UTC',
+        })
+      }
+
+      const eobt = `${match[1]}:${match[2]}`
+      const currentEobt = String(current.eobt || '').replace(/^(\d{2})(\d{2})$/, '$1:$2')
+
+      if (eobt !== currentEobt) {
+        changes.eobt = eobt
+        previous.eobt = current.eobt ?? null
+
+        const source = current.eobt_at || current.eobtDateTime
+        const dof = String(current.dof || current.icao?.dof || '').trim()
+
+        let datePart = null
+
+        if (source) {
+          const parsed = new Date(source)
+
+          if (!Number.isNaN(parsed.getTime())) {
+            datePart = parsed.toISOString().slice(0, 10)
+          }
+        }
+
+        if (!datePart && /^\d{6}$/.test(dof)) {
+          const year = 2000 + Number(dof.slice(0, 2))
+          const month = Number(dof.slice(2, 4))
+          const day = Number(dof.slice(4, 6))
+
+          const candidate = new Date(Date.UTC(year, month - 1, day))
+
+          if (
+            candidate.getUTCFullYear() === year &&
+            candidate.getUTCMonth() === month - 1 &&
+            candidate.getUTCDate() === day
+          ) {
+            datePart = candidate.toISOString().slice(0, 10)
+          }
+        }
+
+        if (!datePart) {
+          return res.status(422).json({
+            error: 'Falta fecha EOBT/DOF válida para cambiar la hora',
+          })
+        }
+
+        const eobtAt = new Date(`${datePart}T${eobt}:00Z`)
+
+        changes.eobt_at = eobtAt
+
+        if (current.eobtDateTime !== undefined) {
+          changes.eobtDateTime = eobtAt.toISOString()
+        }
+      }
+    }
+
+    // =====================================
+    // MODIFICAR EET
+    // =====================================
+
+    if (body.eet !== undefined) {
+      const match = /^(\d{1,3}):?([0-5]\d)$/.exec(String(body.eet).trim())
+
+      if (!match || (Number(match[1]) === 0 && Number(match[2]) === 0)) {
+        return res.status(400).json({
+          error: 'EET no válido. Utilice HH:mm mayor que cero',
+        })
+      }
+
+      const eet = `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`
+
+      if (eet !== current.eet) {
+        changes.eet = eet
+        previous.eet = current.eet ?? null
+      }
+    }
+
+    // =====================================
+    // MODIFICAR RUTA
+    // =====================================
+
+    if (body.route !== undefined) {
+      const route = String(body.route).trim().toUpperCase()
+
+      if (!route || route.length > 2000 || !/^[A-Z0-9 /.-]+$/.test(route)) {
+        return res.status(400).json({
+          error: 'Ruta no válida',
+        })
+      }
+
+      if (route !== current.route) {
+        changes.route = route
+        previous.route = current.route ?? null
+      }
+    }
+
+    // =====================================
+    // VERIFICAR CAMBIOS
+    // =====================================
+
+    if (!Object.keys(changes).length) {
+      return res.status(400).json({
+        error: 'No se detectaron cambios',
+      })
+    }
+
+    // =====================================
+    // ACTUALIZAR MONGODB
+    // =====================================
+
+    const timestamp = new Date()
+
+    const filter = {
+      _id,
+      lifecycle: { $nin: ['CANCELLED', 'DEPARTED', 'ARRIVED'] },
+      status: { $nin: ['CNL', 'CANCELLED'] },
+      departed_at: { $exists: false },
+      arrived_at: { $exists: false },
+      updated_at: current.updated_at === undefined ? { $exists: false } : current.updated_at,
+    }
+
+    const result = await collection.updateOne(filter, {
+      $set: {
+        ...changes,
+        updated_at: timestamp,
+      },
+      $push: {
+        change_history: {
+          type: 'CHG',
+          timestamp,
+          previous,
+          changes,
+          aftnDelivered: false,
+        },
+      },
+    })
+
+    if (result.modifiedCount !== 1) {
+      return res.status(409).json({
+        error: 'El plan cambió. Actualice y vuelva a intentar.',
+      })
+    }
+
+    return res.json({
+      success: true,
+      message: 'CHG registrado correctamente en MongoDB',
+      aftnDelivered: false,
+      flightPlan: await collection.findOne({ _id }),
+    })
+  } catch (error) {
+    console.error('Error CHG:', error)
+
+    return res.status(500).json({
+      error: 'No se pudo modificar el plan de vuelo',
+    })
+  }
+})
+
+// =====================================
+// CANCELAR PLAN DE VUELO (CNL)
+// =====================================
+
+app.put('/api/flight-plans/:id/cancel', checkDatabase, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        error: 'ID de plan no válido',
+      })
+    }
+
+    const collection = db.collection('flight_plans')
+    const _id = new ObjectId(id)
+
+    const current = await collection.findOne({ _id })
+
+    if (!current) {
+      return res.status(404).json({
+        error: 'Plan de vuelo no encontrado',
+      })
+    }
+
+    const lifecycle = String(current.lifecycle || '').toUpperCase()
+    const status = String(current.status || '').toUpperCase()
+
+    if (lifecycle === 'CANCELLED' || ['CNL', 'CANCELLED'].includes(status)) {
+      return res.status(409).json({
+        error: 'El plan ya está cancelado',
+      })
+    }
+
+    if (['DEPARTED', 'ARRIVED'].includes(lifecycle) || current.departed_at || current.arrived_at) {
+      return res.status(409).json({
+        error: 'No se puede cancelar un vuelo con salida o llegada registrada',
+      })
+    }
+
+    const timestamp = new Date()
+
+    const result = await collection.updateOne(
+      {
+        _id,
+        lifecycle: { $nin: ['CANCELLED', 'DEPARTED', 'ARRIVED'] },
+        status: { $nin: ['CNL', 'CANCELLED'] },
+        departed_at: { $exists: false },
+        arrived_at: { $exists: false },
+      },
+      {
+        $set: {
+          status: 'CANCELLED',
+          lifecycle: 'CANCELLED',
+          cancelled_at: timestamp,
+          updated_at: timestamp,
+        },
+      },
+    )
+
+    if (result.modifiedCount !== 1) {
+      return res.status(409).json({
+        error: 'El estado del plan cambió; vuelva a consultar',
+      })
+    }
+
+    const flightPlan = await collection.findOne({ _id })
+
+    return res.json({
+      success: true,
+      message: 'Plan cancelado correctamente (sin transmisión AFTN)',
+      flightPlan,
+    })
+  } catch (error) {
+    console.error('Error cancelando plan:', error)
+
+    return res.status(500).json({
+      error: 'No se pudo cancelar el plan de vuelo',
+    })
+  }
+})
+
+// =====================================
 // ELIMINAR PLAN
 // =====================================
 
@@ -2804,6 +3171,163 @@ function getPointId(point) {
 }
 
 // =====================================
+// CONSULATA DE PLANES DE VUELO POR AERÓDROMO
+// =====================================
+
+app.get('/api/flight-plans/search', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    const {
+      type = '',
+      callsign = '',
+      date = '',
+      departure = '',
+      arrival = '',
+      status = '',
+      page = '1',
+      limit = '25',
+    } = req.query
+
+    const collection = db.collection('flight_plans')
+    const filter = {}
+    // ==========================================
+    // RESTRICCIÓN DE CONSULTA POR ESTACIÓN
+    // ==========================================
+
+    const stationAirports = {
+      CUL: 'MMCL',
+      MZT: 'MMMZ',
+      SJD: 'MMSD',
+      TIJ: 'MMTJ',
+      HMO: 'MMHO',
+      LAP: 'MMLP',
+      CEN: 'MMCN',
+      MXL: 'MMML',
+      CSL: 'MMSL',
+      DGO: 'MMDO',
+      LMM: 'MMLM',
+      GYM: 'MMGM',
+      LTO: 'MMLT',
+    }
+
+    const role = String(req.user.role || '').toUpperCase()
+    const station = String(req.user.airport || '')
+      .trim()
+      .toUpperCase()
+
+    // ROOT y ADMIN pueden consultar todas las estaciones.
+    const globalAccess = ['ROOT', 'ADMIN'].includes(role)
+
+    if (!globalAccess) {
+      const airportICAO = stationAirports[station]
+
+      if (!airportICAO) {
+        return res.status(403).json({
+          success: false,
+          message: 'No existe un aeropuerto configurado para su estación.',
+        })
+      }
+
+      filter.$and = [
+        {
+          $or: [{ departure: airportICAO }, { destination: airportICAO }],
+        },
+      ]
+    }
+
+    const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    const contains = (value) => ({
+      $regex: escapeRegex(value.trim()),
+      $options: 'i',
+    })
+
+    if (callsign.trim()) {
+      filter.callsign = contains(callsign)
+    }
+
+    if (departure.trim()) {
+      filter.departure = contains(departure)
+    }
+
+    if (arrival.trim()) {
+      filter.destination = contains(arrival)
+    }
+
+    if (status.trim()) {
+      filter.$and = [
+        ...(filter.$and || []),
+        {
+          $or: [{ status: contains(status) }, { lifecycle: contains(status) }],
+        },
+      ]
+    }
+
+    if (type.trim()) {
+      const messageType = type.trim().toUpperCase()
+
+      if (messageType === 'FPL') {
+        filter.$or = [{ message_type: 'FPL' }, { type: 'FPL' }]
+      } else {
+        filter.$or = [
+          { message_type: messageType },
+          { type: messageType },
+          { 'change_history.type': messageType },
+        ]
+      }
+    }
+    if (date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fecha inválida. Utilice YYYY-MM-DD.',
+        })
+      }
+
+      const start = new Date(`${date}T00:00:00.000Z`)
+      const end = new Date(start.getTime() + 86400000)
+
+      if (Number.isNaN(start.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fecha inválida.',
+        })
+      }
+
+      // Ajustar el campo si tu colección utiliza otro nombre.
+      filter.created_at = { $gte: start, $lt: end }
+    }
+
+    const currentPage = Math.max(1, Number(page) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(limit) || 25))
+
+    const total = await collection.countDocuments(filter)
+
+    const documents = await collection
+      .find(filter)
+      .sort({ _id: -1 })
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .toArray()
+
+    res.json({
+      success: true,
+      total,
+      page: currentPage,
+      limit: pageSize,
+      totalPages: Math.ceil(total / pageSize),
+      data: documents,
+    })
+  } catch (error) {
+    console.error('Error consultando flight_plans:', error)
+
+    res.status(500).json({
+      success: false,
+      message: 'Error al consultar planes de vuelo.',
+    })
+  }
+})
+
+// =====================================
 // CATÁLOGO DE AERÓDROMOS - FPL
 // =====================================
 
@@ -2843,27 +3367,76 @@ app.get('/api/airports', checkDatabase, async (req, res) => {
   }
 })
 // =====================================
-// INICIAR SERVIDOR
+// TIMEOUT SIMULADO DE ARRIBOS
 // =====================================
 
+async function updateSimulatedArrivals() {
+  const now = new Date()
+
+  const flights = await db
+    .collection('flight_plans')
+    .find({
+      simulated: true,
+      lifecycle: 'DEPARTED',
+    })
+    .toArray()
+
+  for (const flight of flights) {
+    if (!flight.eta_at) continue
+
+    const eta = new Date(flight.eta_at)
+
+    if (Number.isNaN(eta.getTime())) continue
+
+    if (now >= eta) {
+      await db.collection('flight_plans').updateOne(
+        {
+          _id: flight._id,
+          lifecycle: 'DEPARTED',
+        },
+        {
+          $set: {
+            lifecycle: 'ARRIVED',
+            arrived_at: now,
+            updated_at: now,
+            arrival_source: 'SIMULATED_TIMEOUT',
+          },
+        },
+      )
+    }
+  }
+}
 async function startServer() {
   await connectDB()
+
+  // ==========================================
+  // TIMEOUT AUTOMÁTICO DE LLEGADAS SIMULADAS
+  // ==========================================
+
+  setInterval(async () => {
+    if (!db) return
+
+    try {
+      await updateSimulatedArrivals()
+    } catch (error) {
+      console.error('Error actualizando llegadas:', error)
+    }
+  }, 15000)
+
+  // ==========================================
+  // INICIAR SERVIDOR EXPRESS
+  // ==========================================
 
   app.listen(PORT, () => {
     console.log('')
     console.log('==============================')
-
     console.log('       ATCFPL BACKEND')
-
     console.log('==============================')
-
     console.log(`API: http://localhost:${PORT}`)
-
     console.log(`MongoDB: ${databaseName}`)
-
     console.log('==============================')
-
     console.log('')
+    console.log('Timeout ARRIVED: activo (15 segundos)')
   })
 }
 // ======================================================

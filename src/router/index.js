@@ -25,7 +25,20 @@ const router = createRouter({
       name: 'ats-messaging',
       component: AtsMessagingView,
     },
-
+    {
+      path: '/flight-plans/query',
+      name: 'FlightPlansQuery',
+      component: () => import('@/views/FlightPlansQueryView.vue'),
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/traffic-simulator',
+      name: 'traffic-simulator',
+      component: () => import('../views/TrafficSimulatorView.vue'),
+      meta: { requiresAuth: true },
+    },
     {
       path: '/',
       name: 'dashboard',

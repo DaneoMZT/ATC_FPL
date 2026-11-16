@@ -132,13 +132,15 @@ const logout = () => {
 const updateUTCTime = () => {
   const now = new Date()
 
+  const day = String(now.getUTCDate()).padStart(2, '0')
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const year = now.getUTCFullYear()
+
   const hours = String(now.getUTCHours()).padStart(2, '0')
-
   const minutes = String(now.getUTCMinutes()).padStart(2, '0')
-
   const seconds = String(now.getUTCSeconds()).padStart(2, '0')
 
-  utcTime.value = `${hours}:${minutes}:${seconds}`
+  utcTime.value = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`
 }
 
 onMounted(() => {
@@ -209,10 +211,11 @@ onUnmounted(() => {
 
 .utc strong {
   font-family: 'JetBrains Mono', monospace;
-
-  font-size: 17px;
-
+  font-size: 15px;
+  font-weight: 700;
   color: #ffffff;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* CONEXIÓN */

@@ -4,6 +4,7 @@ import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
 const emit = defineEmits(['close', 'save'])
 
 const activeTab = ref('fpl')
+const dofDate = ref('')
 
 // =====================================
 // ITEM 18 - CATÁLOGO DE OPERADORES
@@ -71,6 +72,8 @@ function updateEOBT() {
   const minutes = String(eobtDate.getUTCMinutes()).padStart(2, '0')
 
   form.eobt = `${hours}:${minutes}`
+  dofDate.value = eobtDate.toISOString().slice(0, 10)
+  form.dof = dofDate.value.slice(2).replaceAll('-', '')
 }
 
 // =====================================
@@ -396,8 +399,6 @@ function togglePbn(code) {
 // ITEM 18 - DOF FECHA DE VUELO
 // =====================================
 
-const dofDate = ref('')
-
 function updateDOF() {
   if (!dofDate.value) {
     form.dof = ''
@@ -643,8 +644,17 @@ function selectPerformanceLevel() {
 
 const eetLoading = ref(false)
 const eetError = ref('')
+const eetManual = ref(false)
+
+function onEetInput(event) {
+  const value = event.target.value.replace(/[^0-9:]/g, '').slice(0, 5)
+  form.eet = value
+  eetManual.value = value.length > 0
+  isValidated.value = false
+}
 
 async function calculateEET() {
+  if (eetManual.value) return
   if (!form.departure || !form.destination || !form.route || !form.speed) {
     form.eet = ''
     return
@@ -670,10 +680,10 @@ async function calculateEET() {
 
     const data = await response.json()
 
-    form.eet = data.eet
+    if (!eetManual.value) form.eet = data.eet
   } catch (error) {
     eetError.value = error.message
-    form.eet = ''
+    if (!eetManual.value) form.eet = ''
   } finally {
     eetLoading.value = false
   }
@@ -940,7 +950,6 @@ const aftnPreview = computed(() => {
 ================================================== */
 
 function validateFlight() {
-
   const errors = []
 
   /* ITEM 7 */
@@ -1070,12 +1079,38 @@ function validateFlight() {
 
 ================================================== */
 
+// Combina DOF (fecha UTC) y EOBT (hora UTC) sin depender de la zona local.
+function getEobtUtc() {
+  const dateValue = dofDate.value
+  const timeValue = String(form.eobt || '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeValue))
+    return null
+  const iso = `${dateValue}T${timeValue}:00.000Z`
+  const date = new Date(iso)
+  return !Number.isNaN(date.getTime()) && date.toISOString() === iso ? iso : null
+}
+
 function saveFlight() {
   if (!validateFlight()) {
     return
   }
 
+  const eobtAt = getEobtUtc()
+  if (!eobtAt) {
+    validationErrors.value = [
+      {
+        field: 'ITEM 13 / DOF',
+        message: 'Selecciona una fecha DOF y una hora EOBT válidas en UTC.',
+      },
+    ]
+    isValidated.value = false
+    activeTab.value = 'fpl'
+    return
+  }
+
   const flight = {
+    eobt_at: eobtAt,
+    departure_mode: 'MANUAL',
     callsign: upper(form.callsign),
 
     aircraft: upper(form.aircraftType),
@@ -1407,9 +1442,17 @@ function saveFlight() {
                   </div>
 
                   <div class="field">
-                    <label> EOBT </label>
+                    <label> EOBT (UTC) </label>
 
-                    <input v-model="form.eobt" type="time" required />
+                    <input
+                      v-model="form.eobt"
+                      type="text"
+                      inputmode="numeric"
+                      placeholder="HH:mm"
+                      maxlength="5"
+                      pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                      title="Hora UTC en formato de 24 horas (HH:mm)"
+                    />
                   </div>
                 </div>
               </section>
@@ -1528,9 +1571,10 @@ function saveFlight() {
                     <input
                       v-model="form.eet"
                       type="text"
-                      placeholder="HH:MM"
+                      placeholder="HHMM"
                       maxlength="5"
-                      readonly
+                      inputmode="numeric"
+                      @input="onEetInput"
                       required
                     />
                   </div>
@@ -1797,7 +1841,7 @@ function saveFlight() {
                     maxlength="60"
                     placeholder="BUSCAR AEROLÍNEA O CÓDIGO OACI"
                     autocomplete="off"
-                    @input="handleOperatorSearch"
+                    @input="isValidated = false"
                   />
 
                   <div

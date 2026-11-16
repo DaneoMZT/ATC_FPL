@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "cd backend && NODE_ENV=development TRAFFIC_SIM_ENABLED=true node server.js",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "run-s \"lint:*\"",

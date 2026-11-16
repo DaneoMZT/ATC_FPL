@@ -6,7 +6,9 @@
     }"
   >
     <!-- =====================================
+
          LOGO
+
     ====================================== -->
 
     <div class="brand">
@@ -17,6 +19,7 @@
       <div v-if="!isCollapsed" class="brand-text">
         <h1>
           <span class="atc">ATC</span>
+
           <span class="fpl">FPL</span>
         </h1>
 
@@ -25,7 +28,9 @@
     </div>
 
     <!-- =====================================
+
          HAMBURGUESA
+
     ====================================== -->
 
     <button
@@ -34,29 +39,35 @@
       :title="isCollapsed ? 'Abrir menú' : 'Cerrar menú'"
     >
       <span></span>
+
       <span></span>
+
       <span></span>
     </button>
 
     <!-- =====================================
+
          MENÚ
+
     ====================================== -->
 
     <nav class="menu">
       <!-- DASHBOARD -->
 
       <RouterLink to="/" class="menu-item" title="Dashboard">
-        <span class="menu-icon"> ▦ </span>
+        <span class="menu-icon"><LayoutDashboard /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> Dashboard </span>
       </RouterLink>
 
       <!-- =====================================
+
        PLANES DE VUELO - MENSAJERÍA ATS
+
       ====================================== -->
 
       <RouterLink to="/ats-messaging" class="menu-item" title="Planes de vuelo">
-        <span class="menu-icon"> ✈ </span>
+        <span class="menu-icon"><Plane /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> Planes de vuelo </span>
       </RouterLink>
@@ -64,23 +75,23 @@
       <!-- RUTAS -->
 
       <RouterLink to="/routes" class="menu-item" title="Rutas">
-        <span class="menu-icon"> ⌁ </span>
+        <span class="menu-icon"><RouteIcon /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> Rutas </span>
       </RouterLink>
 
-      <!-- PUNTOS -->
+      <!-- CONSULTA DE PLANES DE VUELO -->
 
-      <a class="menu-item" href="#" title="Puntos característicos">
-        <span class="menu-icon"> ◉ </span>
+      <RouterLink to="/flight-plans/query" class="menu-item" title="Consulta de Planes de Vuelo">
+        <span class="menu-icon"><Search /></span>
 
-        <span v-if="!isCollapsed" class="menu-text"> Puntos característicos </span>
-      </a>
+        <span v-if="!isCollapsed" class="menu-text"> Consulta FPL </span>
+      </RouterLink>
 
       <!-- AEROPUERTOS -->
 
       <RouterLink to="/airports" class="menu-item" active-class="active" title="SID / STAR">
-        <span class="menu-icon"> △ </span>
+        <span class="menu-icon"><PlaneTakeoff /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> SID / STAR </span>
       </RouterLink>
@@ -88,24 +99,42 @@
       <!-- USUARIOS -->
 
       <RouterLink v-if="canManageUsers" to="/users" class="menu-item" title="Usuarios">
-        <span class="menu-icon">♙</span>
+        <span class="menu-icon"><Users /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> Usuarios </span>
       </RouterLink>
 
       <!-- =====================================
-  CONFIGURACIÓN - SOLO ROOT
+
+     SIMULADOR DE TRÁFICO ATS
+
 ====================================== -->
 
+      <RouterLink to="/traffic-simulator" class="menu-item" title="Simulador de tráfico">
+        <span class="menu-icon">
+          <Radar />
+        </span>
+
+        <span v-if="!isCollapsed" class="menu-text"> Simulador FPL </span>
+      </RouterLink>
+
+      <!-- =====================================
+
+      CONFIGURACIÓN - SOLO ROOT
+
+    ====================================== -->
+
       <RouterLink v-if="isRoot" to="/settings" class="menu-item" title="Configuración">
-        <span class="menu-icon">⚙</span>
+        <span class="menu-icon"><Settings /></span>
 
         <span v-if="!isCollapsed" class="menu-text"> Configuración </span>
       </RouterLink>
     </nav>
 
     <!-- =====================================
+
   FOOTER SIDEBAR
+
 ====================================== -->
 
     <div class="sidebar-footer">
@@ -121,9 +150,18 @@
 </template>
 
 <script setup>
-import { Route } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import {
+  LayoutDashboard,
+  Plane,
+  Route as RouteIcon,
+  Search,
+  PlaneTakeoff,
+  Users,
+  Radar,
+  Settings,
+} from 'lucide-vue-next'
 
 const emit = defineEmits(['collapse-change'])
 
@@ -140,6 +178,7 @@ const currentUser = computed(() => {
 const canManageUsers = computed(() => {
   return ['ADMIN', 'ROOT'].includes(currentUser.value.role)
 })
+
 const isRoot = computed(() => {
   return currentUser.value.role === 'ROOT'
 })
@@ -153,16 +192,20 @@ function toggleSidebar() {
 
 <style scoped>
 /* =====================================
+
   SIDEBAR
+
 ===================================== */
 
 .sidebar {
   width: 250px;
+
   height: 100vh;
 
   position: fixed;
 
   left: 0;
+
   top: 0;
 
   z-index: 2000;
@@ -170,6 +213,7 @@ function toggleSidebar() {
   box-sizing: border-box;
 
   display: flex;
+
   flex-direction: column;
 
   padding: 20px 16px;
@@ -182,24 +226,30 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    COLAPSADO
+
 ===================================== */
 
 .sidebar.collapsed {
   width: 78px;
 
   padding-left: 11px;
+
   padding-right: 11px;
 }
 
 /* =====================================
+
    MARCA
+
 ===================================== */
 
 .brand {
   min-height: 48px;
 
   display: flex;
+
   align-items: center;
 
   gap: 12px;
@@ -209,6 +259,7 @@ function toggleSidebar() {
 
 .brand-icon {
   width: 40px;
+
   min-width: 40px;
 
   height: 40px;
@@ -259,7 +310,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    HAMBURGUESA
+
 ===================================== */
 
 .hamburger {
@@ -307,7 +360,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    MENÚ
+
 ===================================== */
 
 .menu {
@@ -363,9 +418,23 @@ function toggleSidebar() {
 
   min-width: 20px;
 
-  text-align: center;
+  display: flex;
 
-  font-size: 17px;
+  align-items: center;
+
+  justify-content: center;
+
+  color: inherit;
+}
+
+.menu-icon svg {
+  width: 18px;
+
+  height: 18px;
+
+  stroke-width: 1.7;
+
+  flex-shrink: 0;
 }
 
 .menu-text {
@@ -375,7 +444,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    MENÚ COLAPSADO
+
 ===================================== */
 
 .sidebar.collapsed .menu-item {
@@ -391,7 +462,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    FOOTER DEL SIDEBAR
+
 ===================================== */
 
 .sidebar-footer {
@@ -422,6 +495,7 @@ function toggleSidebar() {
 
 .status-dot {
   width: 7px;
+
   min-width: 7px;
 
   height: 7px;
@@ -438,7 +512,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    COLAPSADO FOOTER
+
 ===================================== */
 
 .sidebar.collapsed .sidebar-footer {
@@ -456,7 +532,9 @@ function toggleSidebar() {
 }
 
 /* =====================================
+
    RESPONSIVE
+
 ===================================== */
 
 @media (max-width: 800px) {
@@ -464,6 +542,7 @@ function toggleSidebar() {
     width: 78px;
 
     padding-left: 11px;
+
     padding-right: 11px;
   }
 

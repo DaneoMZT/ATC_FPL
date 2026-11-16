@@ -1,6 +1,11 @@
 <script setup>
 import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
 
+const API_BASE = (
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? 'https://atc-fpl.onrender.com' : 'http://localhost:3000')
+).replace(/\/$/, '')
+
 const emit = defineEmits(['close', 'save'])
 
 const activeTab = ref('fpl')
@@ -460,12 +465,9 @@ async function searchAirports(field) {
     airportRequest = controller
 
     try {
-      const response = await fetch(
-        `http://localhost:3000/api/airports?q=${encodeURIComponent(q)}`,
-        {
-          signal: controller.signal,
-        },
-      )
+      const response = await fetch(`${API_BASE}/api/airports?q=${encodeURIComponent(q)}`, {
+        signal: controller.signal,
+      })
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
@@ -551,12 +553,9 @@ watch(
         //const response = await fetch(`/api/aircraft-types?q=${encodeURIComponent(q)}`, {
         //signal: controller.signal
         //})
-        const response = await fetch(
-          `http://localhost:3000/api/aircraft-types?q=${encodeURIComponent(q)}`,
-          {
-            signal: controller.signal,
-          },
-        )
+        const response = await fetch(`${API_BASE}/api/aircraft-types?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
         if (aircraftRequest !== controller) return
@@ -603,7 +602,7 @@ async function loadAircraftPerformance(designator) {
 
   try {
     const response = await fetch(
-      `http://localhost:3000/api/aircraft-performance/${encodeURIComponent(designator)}`,
+      `${API_BASE}/api/aircraft-performance/${encodeURIComponent(designator)}`,
       { signal: controller.signal },
     )
 
@@ -672,7 +671,7 @@ async function calculateEET() {
       level: form.level,
     })
 
-    const response = await fetch(`http://localhost:3000/api/flight-eet?${params}`)
+    const response = await fetch(`${API_BASE}/api/flight-eet?${params}`)
 
     if (!response.ok) {
       throw new Error('No se pudo calcular el EET')
@@ -688,13 +687,7 @@ async function calculateEET() {
     eetLoading.value = false
   }
 }
-// Recalcular EET cuando cambien los datos del vuelo
-watch(
-  () => [form.departure, form.destination, form.route, form.speed, form.level],
-  () => {
-    calculateEET()
-  },
-)
+// EET se captura manualmente en formato HHMM (Sprint 7).
 
 function chooseAircraft(aircraft) {
   selectedAircraft.value = aircraft
@@ -745,7 +738,7 @@ async function generateRoute(force = false) {
 
   try {
     const response = await fetch(
-      `http://localhost:3000/api/route-suggestions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`,
+      `${API_BASE}/api/route-suggestions?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`,
       { signal: controller.signal },
     )
 

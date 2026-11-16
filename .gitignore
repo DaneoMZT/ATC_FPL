@@ -37,3 +37,9 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+.env
+.env.*
+!.env.example
+node_modules/
+backend/node_modules/

@@ -611,14 +611,17 @@ function checkDatabase(req, res, next) {
 
   next()
 }
+
 const trafficSimulatorAccess = (req, res, next) => {
   const enabled = process.env.TRAFFIC_SIM_ENABLED === 'true'
   const environment = process.env.NODE_ENV
 
+  const host = String(req.headers.host || '').split(':')[0]
+
   const isLocal =
     environment === 'development' &&
     ['127.0.0.1', 'localhost'].includes(req.hostname) &&
-    ['127.0.0.1', 'localhost'].includes(String(req.headers.host || '').split(':')[0])
+    ['127.0.0.1', 'localhost'].includes(host)
 
   const isAuthorizedRemote =
     environment === 'production' &&

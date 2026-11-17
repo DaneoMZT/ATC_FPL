@@ -69,12 +69,12 @@ function addFlightMarker(map, flight, lat, lng) {
     </div>
   `
 
-  marker.bindTooltip(label, {
+  marker.bindTooltip(flight.callsign, {
     permanent: true,
     direction: 'top',
     offset: [0, -12],
     opacity: 1,
-    className: 'atcfpl-flight-tooltip',
+    className: 'aircraft-callsign',
   })
 
   return marker

@@ -1,4 +1,5 @@
 <script setup>
+import { API_BASE } from '../config'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 import FlightPlanModal from '../components/FlightPlanModal.vue'
@@ -38,12 +39,6 @@ const apiOnline = ref(false)
 let clockTimer
 
 let refreshTimer
-
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000')
-
-  .replace(/\/$/, '')
-
-  .replace(/\/api$/, '')
 
 // =====================================
 
@@ -139,6 +134,16 @@ function normalizeFlight(flight) {
     ...flight,
 
     id: String(flight._id || flight.id || ''),
+
+    departure: String(flight.departure || '')
+      .trim()
+      .toUpperCase(),
+
+    destination: String(flight.destination || '')
+      .trim()
+      .toUpperCase(),
+
+    simulated: flight.simulated === true,
 
     lifecycle:
       flight.lifecycle ||
@@ -324,20 +329,37 @@ const uncoordinated = computed(() =>
 const preactive = computed(() =>
   localDepartures.value.filter((flight) => stage(flight) === 'PREACTIVE'),
 )
+
 const departure = computed(() =>
-  localDepartures.value.filter((flight) => stage(flight) === 'DEPARTURE'),
+  localDepartures.value.filter((flight) => {
+    const currentStage = stage(flight)
+
+    return (
+      currentStage === 'DEPARTURE' || (flight.simulated === true && currentStage === 'DEPARTED')
+    )
+  }),
 )
 const departedCount = computed(
   () => localDepartures.value.filter((flight) => stage(flight) === 'DEPARTED').length,
 )
+
 const arrivalQueue = computed(() =>
   flights.value
-    .filter(
-      (flight) =>
-        String(flight.destination || '').toUpperCase() === dashboardAirportCode.value &&
-        stage(flight) !== 'CANCELLED',
-    )
-    .sort((a, b) => String(a.eta || '').localeCompare(String(b.eta || ''))),
+    .filter((flight) => {
+      const destination = String(flight.destination || '')
+        .trim()
+        .toUpperCase()
+
+      const currentStage = stage(flight)
+
+      return destination === dashboardAirportCode.value && currentStage !== 'CANCELLED'
+    })
+    .sort((a, b) => {
+      const etaA = arrivalEtaTimestamp(a) ?? Infinity
+      const etaB = arrivalEtaTimestamp(b) ?? Infinity
+
+      return etaA - etaB
+    }),
 )
 
 // =====================================
@@ -947,6 +969,15 @@ onUnmounted(() => {
             <tr v-for="flight in section.items" :key="flight.id">
               <td class="callsign">
                 {{ flight.callsign }}
+
+                <span v-if="flight.simulated" class="simulated-badge"> SIMULADO </span>
+
+                <span
+                  v-if="flight.simulated && stage(flight) === 'DEPARTED'"
+                  class="departed-badge"
+                >
+                  DEPARTED
+                </span>
               </td>
 
               <td>
@@ -988,7 +1019,7 @@ onUnmounted(() => {
                   <button @click="cancelFlight(flight)">CNL</button>
 
                   <button
-                    v-if="section.key === 'DEPARTURE'"
+                    v-if="section.key === 'DEPARTURE' && stage(flight) === 'DEPARTURE'"
                     :disabled="departureMode !== 'manual'"
                     class="dep-button"
                     @click="confirmDeparture(flight)"
@@ -1063,7 +1094,10 @@ onUnmounted(() => {
               :key="item.flight.id || `${item.flight.callsign}-${index}`"
               :class="{ 'arrival-row-critical': item.group === 'critical' }"
             >
-              <td class="callsign">{{ item.flight.callsign }}</td>
+              <td class="callsign">
+                {{ item.flight.callsign }}
+                <span v-if="item.flight.simulated" class="simulated-badge"> SIMULADO </span>
+              </td>
               <td>{{ item.flight.departure }}</td>
               <td>{{ item.flight.destination }}</td>
               <td>{{ arrivalEtaUTC(item.flight) }}</td>
@@ -2075,11 +2109,11 @@ tbody tr:last-child td {
    \===================================================== */
 
 .dashboard {
-  \--dashboard-muted: #a0b3c6;
+  --dashboard-muted: #a0b3c6;
 
-  \--dashboard-border: #20374a;
+  --dashboard-border: #20374a;
 
-  \--dashboard-surface: #0e1c2c;
+  --dashboard-surface: #0e1c2c;
 
   padding: clamp(16px, 2vw, 30px);
 }
@@ -2117,7 +2151,7 @@ tbody tr:last-child td {
 }
 
 .card {
-  \--accent: #808080;
+  --accent: #808080;
 
   min-height: 120px;
 
@@ -2159,19 +2193,19 @@ tbody tr:last-child td {
 }
 
 .card-uncoordinated {
-  \--accent: #a1a1aa;
+  --accent: #a1a1aa;
 }
 
 .card-preactive {
-  \--accent: #fb923c;
+  --accent: #fb923c;
 }
 
 .card-departure {
-  \--accent: #4ade80;
+  --accent: #4ade80;
 }
 
 .card-arrive {
-  \--accent: #facc15;
+  --accent: #facc15;
 }
 
 .settings-row {
@@ -2205,7 +2239,7 @@ tbody tr:last-child td {
 }
 
 .panel-header {
-  \--section-accent: #4bafcb;
+  --section-accent: #4bafcb;
 
   min-height: 70px;
 
@@ -2251,25 +2285,25 @@ tbody tr:last-child td {
 }
 
 .panel-header.header-uncoordinated {
-  \--section-accent: #a1a1aa;
+  --section-accent: #a1a1aa;
 
   background: linear-gradient(90deg, #29323e, #182535);
 }
 
 .panel-header.header-preactive {
-  \--section-accent: #f97316;
+  --section-accent: #f97316;
 
   background: linear-gradient(90deg, #3b291e, #1b2633);
 }
 
 .panel-header.header-departure {
-  \--section-accent: #22c55e;
+  --section-accent: #22c55e;
 
   background: linear-gradient(90deg, #193b2e, #172a32);
 }
 
 .panel-header.header-arrive {
-  \--section-accent: #facc15;
+  --section-accent: #facc15;
 
   background: linear-gradient(90deg, #3a351b, #1b2932);
 }
@@ -2510,5 +2544,34 @@ tbody tr:hover {
   .arrival-block-count {
     font-size: 26px;
   }
+}
+
+/* =====================================
+   IDENTIFICACIÓN DE VUELOS SIMULADOS
+===================================== */
+
+.simulated-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 4px 7px;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 5px;
+  color: #00e5ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.departed-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 4px 7px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 5px;
+  color: #4ade80;
+  font-size: 10px;
+  font-weight: 700;
 }
 </style>

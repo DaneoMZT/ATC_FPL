@@ -70,13 +70,21 @@ function renderFlights() {
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     })
-    const marker = L.marker(position, { icon }).addTo(flightLayer)
-    const safeCallsign = String(flight.callsign || 'SIN ID').replace(/[&<>"']/g, '')
-    marker.bindTooltip(`${safeCallsign} · ${Math.ceil(minutes)} min · SIMULADO`, {
-      direction: 'top',
-    })
-  })
-}
+ const marker = L.marker(position, { icon }).addTo(flightLayer)
+
+const safeCallsign = String(flight.callsign || 'SIN ID')
+  .trim()
+  .toUpperCase()
+  .replace(/[&<>"']/g, '')
+
+marker.bindTooltip(safeCallsign, {
+  permanent: true,
+  direction: 'top',
+  offset: [0, -12],
+  opacity: 1,
+  className: 'aircraft-callsign',
+  interactive: false,
+})
 
 function initMap() {
   if (map || !mapElement.value || !airportPosition.value) return
@@ -204,5 +212,24 @@ onUnmounted(() => {
   .arrival-map-canvas {
     height: 300px;
   }
+}
+/* CALLSIGN VISIBLE SOBRE CADA AERONAVE */
+
+:deep(.aircraft-callsign) {
+  background: rgba(8, 26, 43, 0.95);
+  color: #00e5ff;
+  border: 1px solid #00e5ff;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+:deep(.aircraft-callsign::before) {
+  border-top-color: #00e5ff;
 }
 </style>

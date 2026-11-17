@@ -226,22 +226,6 @@ function initMap() {
   })
 
   map.setView(airportPosition.value, 9)
-  // PRUEBA TEMPORAL DE CALLSIGN
-  L.marker(airportPosition.value, {
-    icon: L.divIcon({
-      className: '',
-      html: '<div style="font-size:28px;color:red">✈</div>',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    }),
-  })
-    .addTo(map)
-    .bindTooltip('PRUEBA123', {
-      permanent: true,
-      direction: 'top',
-      offset: [0, -15],
-      opacity: 1,
-    })
 
   // Mapa OpenStreetMap.
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

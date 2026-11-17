@@ -40,6 +40,46 @@ let clockTimer
 
 let refreshTimer
 
+function addFlightMarker(map, flight, lat, lng) {
+  const callsign = String(flight.callsign || 'SIN ID')
+  const departure = String(flight.departure || '----')
+  const destination = String(flight.destination || '----')
+
+  const etaValue = flight.eta_at || flight.eta
+  const eta = etaValue ? new Date(etaValue) : null
+
+  const etaValid = eta && !Number.isNaN(eta.getTime())
+
+  const etaUtc = etaValid ? eta.toISOString().slice(11, 16) : '--:--'
+
+  const remaining = etaValid ? Math.max(0, Math.ceil((eta.getTime() - Date.now()) / 60000)) : null
+
+  const flightLevel = String(flight.fl || flight.flight_level || '---')
+
+  const marker = L.marker([lat, lng]).addTo(map)
+
+  const label = `
+    <div class="flight-label">
+      <div class="flight-label-title">${callsign}</div>
+      <div>${departure} → ${destination}</div>
+      <div>FL${flightLevel} · ETA ${etaUtc} UTC</div>
+      <div class="flight-label-time">
+        ${remaining === null ? 'ETA no disponible' : remaining + ' min restantes'}
+      </div>
+    </div>
+  `
+
+  marker.bindTooltip(label, {
+    permanent: true,
+    direction: 'top',
+    offset: [0, -12],
+    opacity: 1,
+    className: 'atcfpl-flight-tooltip',
+  })
+
+  return marker
+}
+
 // =====================================
 
 // CONEXIÓN API
@@ -2572,6 +2612,38 @@ tbody tr:hover {
   border-radius: 5px;
   color: #4ade80;
   font-size: 10px;
+  font-weight: 700;
+}
+
+:deep(.atcfpl-flight-tooltip) {
+  background: rgba(5, 24, 43, 0.95);
+  border: 1px solid #00d4ff;
+  border-radius: 7px;
+  color: #ffffff;
+  padding: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+:deep(.atcfpl-flight-tooltip::before) {
+  border-top-color: #00d4ff;
+}
+
+.flight-label {
+  padding: 8px 12px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.flight-label-title {
+  color: #00d4ff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.flight-label-time {
+  color: #ffcc33;
   font-weight: 700;
 }
 </style>

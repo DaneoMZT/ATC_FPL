@@ -479,7 +479,12 @@ async function searchAirports(field) {
 
       airportOptions.value = Array.isArray(data) ? data : []
     } catch (error) {
-      if (error.name !== 'AbortError') {
+      if (error.name !== 'AbortError' && airportRequest === controller) {
+        console.error('ERROR API AEROPUERTOS:', {
+          url: `${API_BASE}/api/airports?q=${encodeURIComponent(q)}`,
+          message: error.message,
+          error,
+        })
         airportError.value = 'No se pudo consultar el catálogo de aeródromos.'
       }
     } finally {

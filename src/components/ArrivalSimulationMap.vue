@@ -50,42 +50,71 @@ function destinationPoint(origin, bearing, distanceKm) {
 
 function renderFlights() {
   if (!map || !flightLayer || !airportPosition.value) return
+
   flightLayer.clearLayers()
+
   const origin = airportPosition.value
+
   upcoming.value.forEach((flight, index) => {
     const minutes = Math.max(0, (etaMs(flight) - props.now) / 60000)
-    // Aproximación visual: 2 km por minuto; NO es velocidad ni posición radar real.
+
+    // Posición ilustrativa: 2 km por minuto restante.
     const distanceKm = Math.max(0.4, minutes * 2)
+
     const bearing = stableBearing(
       `${flight.callsign || flight.id || index}-${flight.departure || ''}`,
     )
+
     const position = destinationPoint(origin, bearing, distanceKm)
+
     const color = minutes <= 10 ? '#ff6174' : minutes <= 20 ? '#ffcc63' : '#59d6a1'
-    L.polyline([position, origin], { color, weight: 1.5, opacity: 0.35, dashArray: '5 7' }).addTo(
-      flightLayer,
-    )
+
+    // Línea ilustrativa hacia el aeropuerto.
+    L.polyline([position, origin], {
+      color,
+      weight: 1.5,
+      opacity: 0.35,
+      dashArray: '5 7',
+    }).addTo(flightLayer)
+
+    // Símbolo de aeronave.
     const icon = L.divIcon({
       className: 'sim-aircraft-marker',
-      html: `<div style="color:${color};font-size:25px;text-shadow:0 1px 6px #00101e;transform:rotate(${(bearing * 180) / Math.PI + 135}deg)">✈</div>`,
+      html: `
+        <div style="
+          color:${color};
+          font-size:25px;
+          text-shadow:0 1px 6px #00101e;
+          transform:rotate(${(bearing * 180) / Math.PI + 135}deg);
+        ">✈</div>
+      `,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     })
- const marker = L.marker(position, { icon }).addTo(flightLayer)
 
-const safeCallsign = String(flight.callsign || 'SIN ID')
-  .trim()
-  .toUpperCase()
-  .replace(/[&<>"']/g, '')
+    const marker = L.marker(position, {
+      icon,
+      zIndexOffset: 1000,
+    }).addTo(flightLayer)
 
-marker.bindTooltip(safeCallsign, {
-  permanent: true,
-  direction: 'top',
-  offset: [0, -12],
-  opacity: 1,
-  className: 'aircraft-callsign',
-  interactive: false,
-})
+    // Mostrar únicamente el CALLSIGN.
+    const callsign = String(flight.callsign || 'SIN ID')
+      .trim()
+      .toUpperCase()
+      .replace(/[&<>"']/g, '')
 
+    marker.bindTooltip(callsign, {
+      permanent: true,
+      direction: 'top',
+      offset: [0, -15],
+      opacity: 1,
+      className: 'aircraft-callsign',
+      interactive: false,
+    })
+
+    marker.openTooltip()
+  })
+}
 function initMap() {
   if (map || !mapElement.value || !airportPosition.value) return
   map = L.map(mapElement.value, { zoomControl: true, attributionControl: true })
@@ -231,5 +260,15 @@ onUnmounted(() => {
 
 :deep(.aircraft-callsign::before) {
   border-top-color: #00e5ff;
+}
+:deep(.leaflet-tooltip.aircraft-callsign) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 1000;
+}
+
+:deep(.sim-aircraft-marker) {
+  background: transparent;
+  border: none;
 }
 </style>

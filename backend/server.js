@@ -612,15 +612,22 @@ function checkDatabase(req, res, next) {
   next()
 }
 const trafficSimulatorAccess = (req, res, next) => {
-  const host = String(req.headers.host || '').split(':')[0]
+  const enabled = process.env.TRAFFIC_SIM_ENABLED === 'true'
+  const environment = process.env.NODE_ENV
 
-  if (
-    process.env.NODE_ENV !== 'development' ||
-    process.env.TRAFFIC_SIM_ENABLED !== 'true' ||
-    !['127.0.0.1', 'localhost'].includes(req.hostname) ||
-    !['127.0.0.1', 'localhost'].includes(host)
-  ) {
+  const isLocal =
+    environment === 'development' &&
+    ['127.0.0.1', 'localhost'].includes(req.hostname) &&
+    ['127.0.0.1', 'localhost'].includes(String(req.headers.host || '').split(':')[0])
+
+  const isAuthorizedRemote =
+    environment === 'production' &&
+    process.env.TRAFFIC_SIM_REMOTE_ENABLED === 'true' &&
+    req.user?.role === 'ROOT'
+
+  if (!enabled || (!isLocal && !isAuthorizedRemote)) {
     return res.status(403).json({
+      success: false,
       error: 'Simulador deshabilitado',
     })
   }

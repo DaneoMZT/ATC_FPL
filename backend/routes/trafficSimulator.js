@@ -23,7 +23,7 @@ function eetMinutes(value) {
 
 function createTrafficSimulatorRouter(db) {
   const router = express.Router()
-  const collection = db.collection('flight_plans')
+  const collection = db.collection('simulated_flight_plans')
 
   // Inyectar un plan de vuelo FPL simulado
   router.post('/fpl', async (req, res) => {

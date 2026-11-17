@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
 
 const API_BASE = (
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? 'https://atc-fpl.onrender.com/api' : 'http://localhost:3000')
+  (import.meta.env.PROD ? 'https://atc-fpl.onrender.com/' : 'http://localhost:3000')
 ).replace(/\/$/, '')
 
 const emit = defineEmits(['close', 'save'])

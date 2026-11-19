@@ -2,7 +2,7 @@
   <header class="header">
     <div>
       <h2>Centro de Control Mazatlán</h2>
-      <span>MMZT · FIR MAZATLÁN</span>
+      <span>MMMZ · FIR MAZATLÁN</span>
     </div>
 
     <div class="header-right">

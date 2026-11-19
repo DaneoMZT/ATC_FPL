@@ -222,6 +222,27 @@ async function loadFlights(silent = false) {
     if (!Array.isArray(response?.flights)) throw new Error('La API no devolvió una lista de planes')
     dashboardAirportCode.value = response.airport || ''
     flights.value = response.flights.map(normalizeFlight)
+    console.log('========== ATCFPL DEBUG ==========')
+
+    console.log('Aeropuerto Dashboard:', dashboardAirportCode.value)
+
+    console.log('Total de vuelos recibidos:', flights.value.length)
+
+    console.table(
+      flights.value.map((flight) => ({
+        id: flight.id,
+        callsign: flight.callsign,
+        departure: flight.departure,
+        destination: flight.destination,
+        lifecycle: flight.lifecycle,
+        simulated: flight.simulated,
+        route: flight.route,
+        departed_at: flight.departed_at,
+        eta_at: flight.eta_at,
+      })),
+    )
+
+    console.log('==================================')
     apiOnline.value = true
     apiError.value = ''
   } catch (error) {

@@ -13,6 +13,7 @@ const message = ref(`(FPL-VOI1123-IS
 
 const flights = ref([])
 const loading = ref(false)
+const refreshing = ref(false)
 const notice = ref('')
 const error = ref('')
 const processingId = ref(null)
@@ -63,18 +64,37 @@ async function request(path, options = {}) {
 }
 
 async function loadFlights() {
+  if (refreshing.value) return
+
+  refreshing.value = true
+  error.value = ''
+
   try {
     const data = await request('/flights')
 
-    flights.value = Array.isArray(data.flights) ? data.flights : []
+    if (!Array.isArray(data.flights)) {
+      throw new Error('El backend no devolvió una lista válida de vuelos.')
+    }
 
-    error.value = ''
+    flights.value = data.flights
   } catch (err) {
+    console.error('Error al actualizar vuelos:', err)
     error.value = err.message
+  } finally {
+    refreshing.value = false
   }
 }
 
 async function injectFpl() {
+  if (loading.value) return
+
+  const fpl = message.value.trim()
+
+  if (!fpl) {
+    error.value = 'Debes ingresar un mensaje FPL.'
+    return
+  }
+
   loading.value = true
   error.value = ''
   notice.value = ''
@@ -83,7 +103,7 @@ async function injectFpl() {
     const data = await request('/fpl', {
       method: 'POST',
       body: JSON.stringify({
-        message: message.value.trim(),
+        message: fpl,
       }),
     })
 
@@ -93,6 +113,7 @@ async function injectFpl() {
 
     notice.value = `FPL ${callsign} registrado correctamente`
   } catch (err) {
+    console.error('Error al inyectar FPL:', err)
     error.value = err.message
   } finally {
     loading.value = false
@@ -142,7 +163,7 @@ onMounted(loadFlights)
         placeholder="Pega un mensaje (FPL-...)"
       />
 
-      <button :disabled="loading" @click="injectFpl">
+      <button type="button" :disabled="loading" @click="injectFpl">
         {{ loading ? 'Procesando...' : 'Inyectar FPL' }}
       </button>
 
@@ -158,7 +179,10 @@ onMounted(loadFlights)
     <section class="sim-panel">
       <div class="section-header">
         <h2>Tráfico simulado</h2>
-        <button @click="loadFlights">Actualizar</button>
+        <button type="button" class="refresh-button" :disabled="refreshing" @click="loadFlights">
+          <span class="refresh-icon" :class="{ spinning: refreshing }">↻</span>
+          <span>Actualizar</span>
+        </button>
       </div>
 
       <div class="table-wrap">
@@ -295,5 +319,71 @@ td {
 
 .error {
   color: #ff8585;
+}
+
+/* BOTÓN ACTUALIZAR */
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 135px;
+  height: 39px;
+  padding: 0 15px;
+  margin-right: 0;
+  background: #0877b9;
+  color: #ffffff;
+  border: 1px solid #168acb;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #0a8bd4;
+}
+
+.refresh-button:disabled {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.refresh-icon {
+  display: inline-block;
+  font-size: 21px;
+  line-height: 1;
+  transform-origin: center;
+}
+
+.refresh-icon.spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ENCABEZADO DE LA TABLA */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
 }
 </style>

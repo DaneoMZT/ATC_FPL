@@ -180,7 +180,12 @@
         <div class="detail-section">
           <div class="section-title">
             <h3>Mensaje ATS almacenado</h3>
-            <button v-if="storedMessage(selected)" class="secondary small" @click="copyMessage">
+            <button
+              v-if="storedMessage(selected)"
+              type="button"
+              class="secondary small"
+              @click.stop="copyMessage"
+            >
               Copiar
             </button>
           </div>
@@ -288,14 +293,58 @@ function storedMessage(flight) {
   ]
   return candidates.find((value) => typeof value === 'string' && value.trim()) || ''
 }
+
 async function copyMessage() {
-  if (!selected.value || !storedMessage(selected.value)) return
+  if (!selected.value) return
+
+  const message = storedMessage(selected.value)
+
+  if (!message) {
+    error.value = 'No hay un mensaje ATS para copiar.'
+    return
+  }
+
   try {
-    await navigator.clipboard.writeText(storedMessage(selected.value))
+    if (!navigator.clipboard?.writeText) {
+      throw new Error('Clipboard API no disponible')
+    }
+
+    await navigator.clipboard.writeText(message)
+
+    alert('Mensaje ATS copiado correctamente.')
   } catch (err) {
-    error.value = 'No fue posible copiar el mensaje.'
+    try {
+      const textarea = document.createElement('textarea')
+
+      textarea.value = message
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      textarea.style.top = '0'
+
+      document.body.appendChild(textarea)
+
+      textarea.focus()
+      textarea.select()
+      textarea.setSelectionRange(0, message.length)
+
+      const copied = document.execCommand('copy')
+
+      document.body.removeChild(textarea)
+
+      if (!copied) {
+        throw new Error('No se pudo copiar el mensaje')
+      }
+
+      alert('Mensaje ATS copiado correctamente.')
+    } catch (fallbackError) {
+      console.error('Error al copiar mensaje ATS:', fallbackError)
+      error.value = 'No fue posible copiar el mensaje ATS.'
+      alert('No fue posible copiar el mensaje ATS.')
+    }
   }
 }
+
 async function loadFlights() {
   loading.value = true
   error.value = ''

@@ -10,6 +10,7 @@ const { createTrafficSimulatorRouter } = require('./routes/trafficSimulator')
 
 const jwt = require('jsonwebtoken')
 const app = express()
+const { resolveFlightPath } = require('./services/flightPathService')
 
 app.use(cors())
 app.use(express.json())
@@ -125,9 +126,67 @@ function userFilter(username) {
     },
   }
 }
-// ======================================================
-// ROOT - EXPLORADOR DE BASE DE DATOS
-// ======================================================
+
+app.get('/api/flight-path/:id', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        error: 'Identificador de FPL no válido',
+      })
+    }
+
+    const current = await db.collection('users').findOne({
+      _id: new ObjectId(req.user.userId),
+    })
+
+    if (!current || !current.active) {
+      return res.status(403).json({
+        error: 'Cuenta no autorizada',
+      })
+    }
+
+    const filter = {
+      _id: new ObjectId(req.params.id),
+    }
+
+    if (current.role !== 'ROOT') {
+      const airport = dashboardAirport(current.airport)
+
+      if (!airport) {
+        return res.status(422).json({
+          error: 'Aeropuerto no configurado',
+        })
+      }
+
+      filter.$or = [{ departure: airport }, { destination: airport }]
+    }
+
+    const flight = await db.collection('flight_plans').findOne(filter)
+
+    if (!flight) {
+      return res.status(404).json({
+        error: 'Plan de vuelo no encontrado o no autorizado',
+      })
+    }
+
+    const result = await resolveFlightPath(db, flight.route)
+
+    return res.json({
+      flight_id: flight._id,
+      callsign: flight.callsign,
+      departure: flight.departure,
+      destination: flight.destination,
+      ...result,
+      simulation: true,
+    })
+  } catch (error) {
+    console.error('Error resolviendo trayectoria:', error)
+
+    return res.status(500).json({
+      error: 'No fue posible resolver la trayectoria',
+    })
+  }
+})
 
 // ------------------------------------------------------
 // ESTADO DE MONGODB
@@ -1223,6 +1282,108 @@ app.get('/api/characteristic-points/:pointId/routes', checkDatabase, async (req,
 // ACTUALIZAR UN PUNTO CARACTERÍSTICO
 // =====================================
 
+app.get('/api/airports/:icao/position', checkDatabase, verifyToken, async (req, res) => {
+  try {
+    const icao = String(req.params.icao || '')
+      .trim()
+      .toUpperCase()
+
+    if (!/^[A-Z]{4}$/.test(icao)) {
+      return res.status(400).json({
+        error: 'Código OACI inválido',
+      })
+    }
+
+    const airport = await db.collection('airports').findOne({
+      $or: [{ airport_id: icao }, { icao: icao }, { icao_code: icao }, { ident: icao }],
+    })
+
+    if (!airport) {
+      return res.status(404).json({
+        error: `Aeropuerto ${icao} no encontrado`,
+      })
+    }
+
+    const validPosition = (lat, lon) => {
+      return (
+        Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+      )
+    }
+
+    // Primero intentar obtener las coordenadas generales.
+    const location = airport.location || {}
+
+    let latitude = Number(airport.latitude ?? airport.lat ?? location.latitude ?? location.lat)
+
+    let longitude = Number(
+      airport.longitude ??
+        airport.lon ??
+        airport.lng ??
+        location.longitude ??
+        location.lon ??
+        location.lng,
+    )
+
+    // Si no existen, buscar una pista con coordenadas válidas.
+    let selectedRunway = null
+    let positionSource = 'AIRPORT'
+
+    if (!validPosition(latitude, longitude)) {
+      const runways = Array.isArray(airport.runways) ? airport.runways : []
+
+      const orderedRunways = [
+        ...runways.filter((rwy) => rwy.default === true),
+        ...runways.filter((rwy) => rwy.default !== true),
+      ]
+
+      for (const runway of orderedRunways) {
+        const runwayLocation = runway.location || {}
+
+        let lat = Number(runwayLocation.latitude)
+        let lon = Number(runwayLocation.longitude)
+
+        if (!validPosition(lat, lon)) {
+          const coordinates = runwayLocation.geojson?.coordinates
+
+          if (Array.isArray(coordinates) && coordinates.length >= 2) {
+            lon = Number(coordinates[0])
+            lat = Number(coordinates[1])
+          }
+        }
+
+        if (validPosition(lat, lon)) {
+          latitude = lat
+          longitude = lon
+          selectedRunway = runway.runway
+          positionSource = 'RUNWAY'
+          break
+        }
+      }
+    }
+
+    if (!validPosition(latitude, longitude)) {
+      return res.status(422).json({
+        error: `El aeropuerto ${icao} no tiene coordenadas válidas`,
+      })
+    }
+
+    return res.json({
+      icao,
+      name: airport.name || airport.airport_name || icao,
+      latitude,
+      longitude,
+      position_source: positionSource,
+      runway: selectedRunway,
+    })
+  } catch (error) {
+    console.error('Error consultando posición del aeropuerto:', error)
+
+    return res.status(500).json({
+      error: 'No se pudo consultar la posición del aeropuerto',
+    })
+  }
+})
+
 // =====================================
 // ACTUALIZAR UN PUNTO CARACTERÍSTICO
 // SOLO ROOT
@@ -1237,7 +1398,6 @@ app.put(
       const currentPointId = String(req.params.pointId || '')
         .trim()
         .toUpperCase()
-
       // =====================================
       // VALIDAR IDENTIFICADOR
       // =====================================
